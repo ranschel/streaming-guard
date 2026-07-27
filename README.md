@@ -148,7 +148,7 @@ The current browser demo persists the household and scenario state locally. Stru
 
 ## Multi-provider model connection
 
-Choose **Connect AI models** in the global top banner, enter the keys for the providers you intend to use, and select separate agent and judge models. The banner is available from every product tab and is the single place where connection status and both model roles appear. Supported choices are GPT-5.6 Sol, Terra, and Luna; Claude Fable 5, Opus 4.8, Sonnet 5, and Haiku 4.5; and Gemini 3.5 Flash, 3.6 Flash, and 3.5 Flash-Lite. The defaults remain `gpt-5.6-terra` for the agent and `gpt-5.6-luna` for the judge.
+Choose **Connect AI Models** in the global top banner, enter the keys for the providers you intend to use, and select separate agent and judge models. The banner is available from every product tab and is the single place where connection status and both model roles appear. Supported choices are GPT-5.6 Sol, Terra, and Luna; Claude Fable 5, Opus 4.8, Sonnet 5, and Haiku 4.5; and Gemini 3.5 Flash, 3.6 Flash, and 3.5 Flash-Lite. The defaults remain `gpt-5.6-terra` for the agent and `gpt-5.6-luna` for the judge.
 
 OpenAI requests use the Responses API, Anthropic requests use the Messages API, and Gemini requests use `generateContent`; every adapter uses the provider’s JSON-schema response feature. All three receive the same immutable system prompt, escalation policy, recommendation style examples, current household context, source-freshness dates, actual trigger context, applicable title rating, validated URLs, feasible actions, deterministic calculations, and recent conversation. The application never supplies a preselected action, status, or expected eval route.
 

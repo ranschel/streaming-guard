@@ -597,12 +597,9 @@
       const info = openAI.modelInfo(model);
       return info ? `${openAI.providerName(info.provider)} ${info.label}` : model;
     };
-    const missing = openAI.missingSelectedProviders(settings);
     document.getElementById("aiStatusText").textContent = connected
       ? `Agent ${roleLabel(settings.model)} · Judge ${roleLabel(settings.judgeModel)}`
-      : missing.length
-        ? `Connect ${missing.join(" + ")}`
-        : "Connect AI models";
+      : "Connect AI Models";
   }
 
   function setChatBusy(busy) {
