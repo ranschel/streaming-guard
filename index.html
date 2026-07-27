@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Streaming Guard helps households review streaming subscription recommendations while keeping every external action under adult control.">
+  <link rel="icon" type="image/png" href="assets/streaming-guard-shield-256.png">
+  <title>Streaming Guard</title>
+  <link rel="stylesheet" href="css/streaming-guard.css">
+</head>
+<body>
+  <header class="product-navigation">
+    <div class="product-navigation-brand">
+      <img src="assets/streaming-guard-shield-256.png" alt="">
+      <div><strong>Streaming Guard</strong><span>Household streaming subscription planning agent</span></div>
+    </div>
+    <div class="product-navigation-controls">
+      <nav class="product-tabs" role="tablist" aria-label="Streaming Guard views">
+        <button class="product-tab active" id="chatTab" type="button" role="tab" aria-selected="true" aria-controls="appShell">Chat</button>
+        <button class="product-tab" id="contextTab" type="button" role="tab" aria-selected="false" aria-controls="memoryView" tabindex="-1">Context</button>
+        <button class="product-tab" id="spendingTab" type="button" role="tab" aria-selected="false" aria-controls="spendingView" tabindex="-1">Spending</button>
+        <button class="product-tab" id="evaluationsTab" type="button" role="tab" aria-selected="false" aria-controls="evaluationsView" tabindex="-1">Evals</button>
+      </nav>
+      <button class="ai-status-button global-ai-status" id="openAISettings" type="button">
+        <span class="ai-status-dot" aria-hidden="true"></span>
+        <span id="aiStatusText">Connect AI models</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="app-shell details-open" id="appShell" role="tabpanel" aria-labelledby="chatTab">
+    <aside class="sidebar" aria-label="Household overview">
+      <div class="section-label">Monthly streaming</div>
+      <section class="budget-card" id="monthlyBudgetCard" aria-label="Monthly streaming budget">
+        <div class="budget-comparison">
+          <div>
+            <div class="budget-line-top"><span id="beforeBudgetLabel">Current monthly streaming</span><strong id="beforeBudgetAmount">—</strong></div>
+            <div class="budget-progress-row">
+              <div class="budget-mini-track" id="beforeBudgetTrack" role="progressbar" aria-label="Current monthly streaming budget utilization" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="budget-mini-fill" id="beforeBudgetFill" style="width:0"></div>
+              </div>
+              <strong class="budget-percent" id="beforeBudgetPercent">0%</strong>
+            </div>
+          </div>
+          <div class="post-action-budget" id="afterBudget" hidden>
+            <div class="budget-line-top"><span id="afterBudgetLabel">After action</span><strong id="afterBudgetAmount">—</strong></div>
+            <div class="budget-mini-track"><div class="budget-mini-fill after" id="afterBudgetFill" style="width:0"></div></div>
+          </div>
+        </div>
+        <div class="savings-callout post-action-budget" id="savingsCallout" hidden><span>Monthly payment saved</span><strong id="monthlySavingsAmount">—</strong></div>
+        <div class="budget-state" id="budgetState">Calculating the household budget…</div>
+      </section>
+
+      <div class="section-label">Recommendation context</div>
+      <section class="context-card" id="recommendationContext" aria-label="Evidence relevant to the current recommendation"></section>
+
+      <div class="sidebar-footer">
+        <button class="text-button restart-button" id="restartDemo" type="button">Restart demo</button>
+        <button class="text-button reset-button" id="resetPrototype" type="button">Reset all saved data</button>
+      </div>
+    </aside>
+
+    <section class="chat" aria-label="Conversation with Streaming Guard">
+      <div class="whatsapp-appbar" aria-label="WhatsApp prototype application header">
+        <div class="whatsapp-brand"><div class="whatsapp-mark" aria-hidden="true">W</div><strong>WhatsApp</strong></div>
+        <div class="whatsapp-appbar-actions">
+          <span class="prototype-badge">Prototype conversation · not connected to WhatsApp</span>
+          <button class="chat-restart-button" id="restartChat" type="button" aria-label="Restart chat and choose another demo scenario">
+            <span aria-hidden="true">↻</span>
+            <strong>Restart chat</strong>
+          </button>
+          <button class="chat-download-button" id="downloadFullChat" type="button" aria-label="Download the complete chat as one PNG image">
+            <span aria-hidden="true">⇩</span>
+            <strong>Save full chat</strong>
+          </button>
+          <button class="chat-fullscreen-toggle" id="chatFullscreenToggle" type="button" aria-pressed="false" aria-label="Show chat full screen">
+            <span aria-hidden="true">↗</span>
+            <strong>Full screen</strong>
+          </button>
+        </div>
+      </div>
+      <header class="chat-header">
+        <div class="agent-persona">
+          <div class="agent-avatar" aria-hidden="true"><img class="agent-avatar-image" src="assets/streaming-guard-shield-256.png" alt=""></div>
+          <div><strong>Streaming Guard</strong><span class="online">● Ready to help</span></div>
+        </div>
+        <div class="header-actions">
+          <div class="status-pill">Advisory only</div>
+          <button class="details-toggle" id="detailsToggle" type="button" aria-expanded="true" aria-controls="recommendationDetails">Hide details</button>
+        </div>
+      </header>
+
+      <div class="messages" id="messages" aria-live="polite"></div>
+
+      <footer class="composer-wrap">
+        <div class="composer-mode" id="composerMode"></div>
+        <form class="composer" id="composerForm">
+          <textarea id="messageInput" rows="1" aria-label="Message Streaming Guard" placeholder="Ask a question or share more information…"></textarea>
+          <button class="send-button" type="submit" aria-label="Send message">➜</button>
+        </form>
+        <div class="composer-hint">Streaming Guard can recommend actions, but only you can change an external account.</div>
+      </footer>
+    </section>
+
+    <aside class="details" id="recommendationDetails" aria-label="Recommendation details">
+      <section class="progress-section">
+        <div class="eyebrow">Live scenario</div>
+        <h2 id="scenarioProgressTitle">Recommendation progress</h2>
+        <p class="details-intro" id="scenarioProgressIntro">This advances as the family discusses and completes the recommendation.</p>
+        <div id="scenarioProgress"></div>
+        <div id="llmActivity" aria-live="polite"></div>
+      </section>
+      <section class="decision-section" id="decisionSection">
+        <div class="eyebrow">Current state</div>
+        <h2>Decision summary</h2>
+        <div id="detailContent"><div class="empty-detail">Choose a demo trigger to see the decision summary.</div></div>
+      </section>
+    </aside>
+  </main>
+
+  <section class="household-context-page" id="memoryView" role="tabpanel" aria-labelledby="contextTab" hidden>
+    <div class="dialog-header">
+      <div class="dialog-heading">
+        <span>Streaming Guard</span>
+        <h2 id="householdContextTitle">Stored household context</h2>
+        <p>Review the household information Streaming Guard uses for recommendations, or continue to the conversation when you are ready.</p>
+      </div>
+      <div class="context-header-actions">
+        <button class="context-update-button" id="updateHouseholdContext" type="button">I need to update something</button>
+        <button class="context-dismiss-button" id="closeMemory" type="button">Continue to chat</button>
+      </div>
+    </div>
+    <div class="dialog-body" id="memoryContent"></div>
+  </section>
+  <section class="spending-page" id="spendingView" role="tabpanel" aria-labelledby="spendingTab" hidden>
+    <div class="dialog-header">
+      <div class="dialog-heading">
+        <span>Streaming Guard</span>
+        <h2>Household spending</h2>
+        <p>Review current subscription costs, annual spending, and the savings realized from completed Streaming Guard recommendations.</p>
+      </div>
+      <div class="context-header-actions">
+        <button class="context-update-button" id="askAboutSpending" type="button">I need to ask something</button>
+        <button class="context-dismiss-button" id="spendingToChat" type="button">Continue to chat</button>
+      </div>
+    </div>
+    <div class="dialog-body" id="spendingContent"></div>
+  </section>
+  <section class="evaluations-page" id="evaluationsView" role="tabpanel" aria-labelledby="evaluationsTab" hidden>
+    <div class="dialog-header">
+      <div class="dialog-heading">
+        <span>Streaming Guard</span>
+        <h2>Evaluation runner</h2>
+        <p>Run and review the ten evaluation cases.</p>
+      </div>
+      <button class="context-update-button evaluation-instructions-button" id="openEvaluationInstructions" type="button">Instructions</button>
+    </div>
+    <div class="dialog-body" id="evaluationsContent"></div>
+  </section>
+  <dialog class="ai-settings-dialog" id="aiSettingsDialog" aria-labelledby="aiSettingsTitle">
+    <form class="ai-settings-card" id="aiSettingsForm">
+      <div>
+        <div class="eyebrow">Live agent connection</div>
+        <h2 id="aiSettingsTitle">AI model settings</h2>
+        <p>Connect one or more providers and choose separate models for agent responses and independent evaluation judgments. Every model receives the same instructions, context, memory, tools, schemas, and deterministic validation.</p>
+      </div>
+      <label class="settings-field">
+        <span>OpenAI API key</span>
+        <input id="openAIApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…">
+      </label>
+      <label class="settings-field">
+        <span>Anthropic API key</span>
+        <input id="anthropicApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+      </label>
+      <label class="settings-field">
+        <span>Google Gemini API key</span>
+        <input id="geminiApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="AI…">
+        <small>Keys are stored only in this browser’s local storage and are never written to a project file. Only the providers selected below require keys.</small>
+      </label>
+      <label class="settings-field">
+        <span>Agent model</span>
+        <select id="openAIModel">
+          <optgroup label="OpenAI">
+            <option value="gpt-5.6-terra">GPT-5.6 Terra · balanced</option>
+            <option value="gpt-5.6-sol">GPT-5.6 Sol · highest capability</option>
+            <option value="gpt-5.6-luna">GPT-5.6 Luna · lowest cost</option>
+          </optgroup>
+          <optgroup label="Anthropic">
+            <option value="claude-fable-5">Claude Fable 5 · highest capability</option>
+            <option value="claude-opus-4-8">Claude Opus 4.8 · quality-first reasoning</option>
+            <option value="claude-sonnet-5">Claude Sonnet 5 · balanced</option>
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 · fast and economical</option>
+          </optgroup>
+          <optgroup label="Google Gemini">
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash · quality-focused</option>
+            <option value="gemini-3.6-flash">Gemini 3.6 Flash · balanced and efficient</option>
+            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite · fast and economical</option>
+          </optgroup>
+        </select>
+        <small>Used for recommendations, chat responses, and evaluation-case responses.</small>
+      </label>
+      <label class="settings-field">
+        <span>Judge model</span>
+        <select id="openAIJudgeModel">
+          <optgroup label="OpenAI">
+            <option value="gpt-5.6-luna">GPT-5.6 Luna · lowest cost</option>
+            <option value="gpt-5.6-terra">GPT-5.6 Terra · balanced</option>
+            <option value="gpt-5.6-sol">GPT-5.6 Sol · highest capability</option>
+          </optgroup>
+          <optgroup label="Anthropic">
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 · fast and economical</option>
+            <option value="claude-sonnet-5">Claude Sonnet 5 · balanced</option>
+            <option value="claude-opus-4-8">Claude Opus 4.8 · quality-first reasoning</option>
+            <option value="claude-fable-5">Claude Fable 5 · highest capability</option>
+          </optgroup>
+          <optgroup label="Google Gemini">
+            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite · fast and economical</option>
+            <option value="gemini-3.6-flash">Gemini 3.6 Flash · balanced and efficient</option>
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash · quality-focused</option>
+          </optgroup>
+        </select>
+        <small>Used only to grade evaluation outputs against the fixed rubric.</small>
+      </label>
+      <div class="ai-settings-actions">
+        <button class="text-button danger-button" id="disconnectOpenAI" type="button">Disconnect all</button>
+        <div>
+          <button class="secondary-button" id="closeAISettings" type="button">Cancel</button>
+          <button class="primary-button" type="submit">Save connection</button>
+        </div>
+      </div>
+      <p class="settings-security-note">This direct-browser key pattern is only for the private local course prototype. Anthropic requires an explicit direct-browser access header. A published production app must route every provider call through a server so visitor keys and provider credentials are not exposed.</p>
+    </form>
+  </dialog>
+  <dialog class="information-dialog" id="informationDialog" aria-labelledby="informationDialogTitle">
+    <article class="information-card">
+      <header class="information-header">
+        <div>
+          <div class="eyebrow">Streaming Guard</div>
+          <h2 id="informationDialogTitle">Information</h2>
+        </div>
+        <button class="information-close" id="closeInformationDialog" type="button" aria-label="Close information panel">×</button>
+      </header>
+      <div class="information-content" id="informationDialogContent"></div>
+      <footer class="information-actions">
+        <button class="primary-button" id="dismissInformationDialog" type="button">Close</button>
+      </footer>
+    </article>
+  </dialog>
+  <div class="toast" id="toast" role="status"></div>
+
+  <footer class="site-footer" aria-label="Site information">
+    <nav aria-label="About and legal information">
+      <a href="#about" data-information-topic="about">About</a>
+      <a href="#terms" data-information-topic="terms">Terms of Use</a>
+      <a href="#privacy" data-information-topic="privacy">Privacy Policy</a>
+      <a href="#copyright" data-information-topic="copyright">Copyright</a>
+    </nav>
+    <span>Private course prototype</span>
+  </footer>
+
+  <script src="js/knowledge-base.js"></script>
+  <script src="js/streaming-guard-math.js"></script>
+  <script src="js/scenario-config.js"></script>
+  <script src="js/household-context.js"></script>
+  <script src="js/memory-store.js"></script>
+  <script src="js/recommendation-engine.js"></script>
+  <script src="js/agent-tools.js"></script>
+  <script src="js/openai-client.js"></script>
+  <script src="js/ui-renderers.js"></script>
+  <script src="js/evaluation-runner.js"></script>
+  <script src="js/vendor/html2canvas.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
