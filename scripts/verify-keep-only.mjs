@@ -91,6 +91,8 @@ knowledge.services.forEach(service => {
 assert(stylesheet.includes(".rec-label { padding: 11px 12px; color: #111b21;"));
 assert(stylesheet.includes(".rec-financial small, .rec-prominent small { display: block; margin-top: 5px; color: #111b21; font-size: 13px;"));
 assert(knowledge.evaluationJudge.includes("Judge semantic meaning rather than exact wording"));
+assert(knowledge.evaluationJudge.includes("clearly defers the recommendation, subscription change, charge, or other account action until the adult decides"));
+assert(knowledge.evaluationJudge.includes("explicitly excluded from other titles or ratings"));
 assert(knowledge.evaluationJudge.includes("authoritative for the exact property described by that check"));
 assert(knowledge.evaluationJudge.includes("never reject an external URL"));
 assert(knowledge.evaluationJudge.includes("A material fact can satisfy an evidence requirement wherever it appears"));
