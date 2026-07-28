@@ -1854,29 +1854,66 @@
       font-size: 13px;
       line-height: 1.5;
     }
-    .eval-prompt-card {
+    .eval-prompt-card-shell {
+      position: relative;
       margin-top: 12px;
       overflow: hidden;
       border: 1px solid var(--color-iris-border);
       border-radius: 16px;
       background: var(--color-deep-iris);
     }
+    .eval-prompt-card {
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
     .eval-prompt-card summary {
-      padding: 15px 18px;
+      position: relative;
+      min-height: 64px;
+      padding: 15px 190px 15px 18px;
       cursor: pointer;
       list-style: none;
     }
     .eval-prompt-card summary::-webkit-details-marker { display: none; }
     .eval-prompt-card summary::after {
       content: "+";
-      float: right;
-      margin-top: -34px;
+      position: absolute;
+      top: 50%;
+      right: 16px;
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      transform: translateY(-50%);
       color: var(--color-clinical-cyan);
       font-size: 22px;
+      line-height: 1;
     }
     .eval-prompt-card[open] summary::after { content: "−"; }
     .eval-prompt-card h4 { margin: 0; color: var(--color-cloud-white); font-size: 14px; font-weight: 600; }
     .eval-prompt-card p { margin: 4px 32px 0 0; color: var(--color-ash); font-size: 12px; }
+    .eval-prompt-fullscreen-button {
+      position: absolute;
+      top: 50%;
+      right: 52px;
+      z-index: 1;
+      transform: translateY(-50%);
+      min-height: 36px;
+      padding: 7px 12px;
+      color: var(--color-cloud-white);
+      border: 1px solid var(--color-clinical-cyan);
+      border-radius: 9999px;
+      background: rgba(21, 201, 255, 0.08);
+      font: inherit;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .eval-prompt-fullscreen-button:hover,
+    .eval-prompt-fullscreen-button:focus-visible {
+      background: rgba(21, 201, 255, 0.18);
+    }
     .eval-prompt-text,
     .eval-output pre {
       max-height: 520px;
@@ -2663,6 +2700,68 @@
       padding: 14px 16px 22px;
       overflow-y: auto;
     }
+    .eval-instruction-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      color: var(--color-cloud-white);
+      background: var(--color-iris-shadow);
+    }
+    .eval-instruction-fullscreen > header {
+      min-height: 84px;
+      padding: 16px clamp(18px, 4vw, 54px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      border-bottom: 1px solid var(--color-iris-border);
+      background: var(--color-deep-iris);
+    }
+    .eval-instruction-fullscreen > header span {
+      color: var(--color-clinical-cyan);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+    .eval-instruction-fullscreen > header h3 {
+      margin: 4px 0 0;
+      font-size: clamp(22px, 3vw, 34px);
+      line-height: 1.05;
+    }
+    .eval-instruction-fullscreen > pre {
+      min-width: 0;
+      min-height: 0;
+      margin: 0;
+      padding: clamp(22px, 4vw, 56px);
+      overflow: auto;
+      white-space: pre-wrap;
+      color: #f4f4ff;
+      background: #111044;
+      font: clamp(13px, 1.25vw, 17px)/1.75 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      tab-size: 2;
+    }
+    .eval-instruction-fullscreen-close {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      flex: 0 0 auto;
+      color: var(--color-cloud-white);
+      border: 1px solid var(--color-clinical-cyan);
+      border-radius: 50%;
+      background: var(--color-iris-shadow);
+      font-size: 26px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .eval-instruction-fullscreen-close:hover,
+    .eval-instruction-fullscreen-close:focus-visible {
+      background: var(--color-iris-glow);
+    }
 
     @keyframes appear { from { opacity: 0; transform: translateY(5px); } }
 
@@ -2846,6 +2945,9 @@
       .eval-manual-grid { grid-template-columns: 1fr; }
       .eval-toolbar-actions > button { flex: 0 0 auto; }
       .eval-instructions-drawer { width: 100%; }
+      .eval-prompt-card summary { padding-right: 190px; }
+      .eval-prompt-fullscreen-button { right: 52px; }
+      .eval-instruction-fullscreen > header { min-height: 76px; }
       .memory-grid { grid-template-columns: 1fr; }
       .context-overview-heading { align-items: flex-start; flex-direction: column; }
       .context-metrics { grid-template-columns: 1fr; }

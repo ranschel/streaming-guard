@@ -1306,6 +1306,20 @@ async function runSuite(
     `${label}: per-case run action was not placed in the case header`
   );
   assert(evaluationMarkup.includes('class="eval-instructions-drawer"'), `${label}: instructions drawer was not rendered`);
+  assert.equal(
+    (evaluationMarkup.match(/data-eval-action="open-instruction-fullscreen"/g) || []).length,
+    6,
+    `${label}: every instruction section did not receive a full-screen action`
+  );
+  const fullScreenInstructionMarkup = window.SubscriptionGuardUI.evaluationMarkup({
+    ...regraded,
+    selectedEvalId: "EVAL-01",
+    instructionsOpen: true,
+    fullScreenInstructionKey: "coreSystemPrompt"
+  });
+  assert(fullScreenInstructionMarkup.includes('class="eval-instruction-fullscreen"'), `${label}: full-screen instruction reader was not rendered`);
+  assert(fullScreenInstructionMarkup.includes('data-eval-action="close-instruction-fullscreen"'), `${label}: full-screen instruction reader omitted its close action`);
+  assert(fullScreenInstructionMarkup.includes("Core System Prompt"), `${label}: full-screen instruction reader omitted the selected instruction`);
   assert(evaluationMarkup.includes("Structured model output"), `${label}: collapsed structured output was not rendered`);
   assert(evaluationMarkup.includes("Independent judge output"), `${label}: collapsed judge output was not rendered`);
   for (const [evalId, verdict] of Object.entries(expected)) {

@@ -68,6 +68,7 @@
   let liveApiActivity = { status: "idle" };
   let selectedEvaluationId = "EVAL-01";
   let evaluationInstructionsOpen = false;
+  let fullScreenEvaluationInstruction = null;
   const stagedMessageDelayMs = 0;
 
   const informationTopics = Object.freeze({
@@ -583,7 +584,8 @@
     content.innerHTML = ui.evaluationMarkup({
       ...model,
       selectedEvalId: selectedEvaluationId,
-      instructionsOpen: evaluationInstructionsOpen
+      instructionsOpen: evaluationInstructionsOpen,
+      fullScreenInstructionKey: fullScreenEvaluationInstruction
     });
     restoreEvaluationScroll(content, scrollState, selectedEvaluationId);
   }
@@ -1577,7 +1579,10 @@
     spendingTab.tabIndex = showingSpending ? 0 : -1;
     chatTab.tabIndex = showingChat ? 0 : -1;
     evaluationsTab.tabIndex = showingEvaluations ? 0 : -1;
-    if (!showingEvaluations) evaluationInstructionsOpen = false;
+    if (!showingEvaluations) {
+      evaluationInstructionsOpen = false;
+      fullScreenEvaluationInstruction = null;
+    }
     if (!showingChat) setChatFullscreen(false);
     if (focusTab) ({ context: contextTab, spending: spendingTab, chat: chatTab, evaluations: evaluationsTab }[view] || contextTab).focus();
   }
@@ -1633,6 +1638,7 @@
   });
   document.getElementById("openEvaluationInstructions").addEventListener("click", () => {
     evaluationInstructionsOpen = true;
+    fullScreenEvaluationInstruction = null;
     renderEvaluations();
     document.querySelector(".eval-instructions-drawer .eval-drawer-close")?.focus();
   });
@@ -1660,9 +1666,23 @@
         return;
       }
       if (action === "close-instructions") {
+        fullScreenEvaluationInstruction = null;
         evaluationInstructionsOpen = false;
         renderEvaluations();
         document.getElementById("openEvaluationInstructions")?.focus();
+        return;
+      }
+      if (action === "open-instruction-fullscreen") {
+        fullScreenEvaluationInstruction = button.dataset.instructionKey;
+        renderEvaluations();
+        document.querySelector(".eval-instruction-fullscreen-close")?.focus();
+        return;
+      }
+      if (action === "close-instruction-fullscreen") {
+        const instructionKey = button.dataset.instructionKey;
+        fullScreenEvaluationInstruction = null;
+        renderEvaluations();
+        document.querySelector(`[data-eval-action="open-instruction-fullscreen"][data-instruction-key="${instructionKey}"]`)?.focus();
         return;
       }
       if (action === "approve-prompt") {
@@ -1915,7 +1935,15 @@
 
   document.addEventListener("keydown", event => {
     if (event.key !== "Escape") return;
+    if (fullScreenEvaluationInstruction) {
+      const instructionKey = fullScreenEvaluationInstruction;
+      fullScreenEvaluationInstruction = null;
+      renderEvaluations();
+      document.querySelector(`[data-eval-action="open-instruction-fullscreen"][data-instruction-key="${instructionKey}"]`)?.focus();
+      return;
+    }
     if (evaluationInstructionsOpen) {
+      fullScreenEvaluationInstruction = null;
       evaluationInstructionsOpen = false;
       renderEvaluations();
       document.getElementById("openEvaluationInstructions")?.focus();

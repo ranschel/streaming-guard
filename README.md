@@ -219,7 +219,7 @@ The instruction architecture has one agent-global layer, two agent task add-ons,
 - Conversation requests add the conversation task instructions.
 - Evaluation judgments use only the separate evaluation-judge instruction, the fixed case, expected behavior, deterministic check results, and complete model output.
 
-The Evals view shows six numbered sections that map one-to-one to six Markdown files in `instructions/`. The displayed text is the exact file content; no hidden instruction text is appended in JavaScript. At runtime, the application assembles either **sections 1–3 + section 4** for a recommendation or **sections 1–3 + section 5** for a conversation. Section 6 governs the independent judge call. Approval is tied to a fingerprint containing all six instruction strings and all ten case definitions.
+The Evals view shows six numbered sections that map one-to-one to six Markdown files in `instructions/`. The displayed text is the exact file content; no hidden instruction text is appended in JavaScript. Each section can be expanded in the instruction drawer or opened by itself in a full-screen reader for detailed review. At runtime, the application assembles either **sections 1–3 + section 4** for a recommendation or **sections 1–3 + section 5** for a conversation. Section 6 governs the independent judge call. Approval is tied to a fingerprint containing all six instruction strings and all ten case definitions.
 
 The project contains a broader case library for later testing, including migration timing, budget conflicts, content-rating boundaries, stale data, annual-plan constraints, and no-action restraint.
 

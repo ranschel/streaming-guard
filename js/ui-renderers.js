@@ -593,10 +593,52 @@
           minute: "2-digit"
         }).format(new Date(value))
       : "";
-    const promptCard = (title, description, prompt, open = false) => `<details class="eval-prompt-card"${open ? " open" : ""}>
-      <summary><div><h4>${escapeHtml(title)}</h4><p>${escapeHtml(description)}</p></div></summary>
-      <pre class="eval-prompt-text">${escapeHtml(prompt)}</pre>
-    </details>`;
+    const promptSpecs = [
+      {
+        key: "coreSystemPrompt",
+        title: "Core System Prompt",
+        description: "Section 1 · instructions/core_system_prompt.md",
+        prompt: model.prompts.coreSystemPrompt
+      },
+      {
+        key: "immutableEscalationPolicy",
+        title: "Immutable Escalation Policy",
+        description: "Section 2 · instructions/immutable_escalation_policy.md",
+        prompt: model.prompts.immutableEscalationPolicy
+      },
+      {
+        key: "runtimeGroundingRules",
+        title: "Runtime Grounding Rules",
+        description: "Section 3 · instructions/runtime_grounding_rules.md",
+        prompt: model.prompts.runtimeGroundingRules
+      },
+      {
+        key: "recommendationAddon",
+        title: "Recommendation Add-On",
+        description: "Section 4 · instructions/recommendation_add_on.md",
+        prompt: model.prompts.recommendationAddon
+      },
+      {
+        key: "conversationAddon",
+        title: "Conversation Add-On",
+        description: "Section 5 · instructions/conversation_add_on.md",
+        prompt: model.prompts.conversationAddon
+      },
+      {
+        key: "evaluationJudge",
+        title: "Evaluation Judge Instructions",
+        description: "Section 6 · instructions/evaluation_judge.md",
+        prompt: model.prompts.evaluationJudge
+      }
+    ];
+    const promptCard = ({ key, title, description, prompt }) => `<div class="eval-prompt-card-shell">
+      <details class="eval-prompt-card">
+        <summary><div><h4>${escapeHtml(title)}</h4><p>${escapeHtml(description)}</p></div></summary>
+        <pre class="eval-prompt-text">${escapeHtml(prompt)}</pre>
+      </details>
+      <button class="eval-prompt-fullscreen-button" type="button" data-eval-action="open-instruction-fullscreen" data-instruction-key="${escapeHtml(key)}" aria-label="Read ${escapeHtml(title)} in full screen">Read full screen</button>
+    </div>`;
+    const selectedPrompt = promptSpecs.find(item => item.key === model.fullScreenInstructionKey);
     const activeEvalId = model.cases.some(item => item.eval_id === model.selectedEvalId)
       ? model.selectedEvalId
       : model.cases.find(item => ["fail", "error"].includes(item.result?.verdict))?.eval_id || model.cases[0]?.eval_id;
@@ -705,12 +747,7 @@
         <div class="eval-drawer-scroll">
           <div class="eval-section-heading"><div><p>These are the exact provider-independent instruction components used by every live model call.</p></div><code>${escapeHtml(model.promptHash)}</code></div>
           <p class="eval-component-map">Sections 1–3 are global. Recommendation calls add section 4; conversation calls add section 5. Section 6 governs the independent judge.</p>
-          ${promptCard("Core System Prompt", "Section 1 · instructions/core_system_prompt.md", model.prompts.coreSystemPrompt)}
-          ${promptCard("Immutable Escalation Policy", "Section 2 · instructions/immutable_escalation_policy.md", model.prompts.immutableEscalationPolicy)}
-          ${promptCard("Runtime Grounding Rules", "Section 3 · instructions/runtime_grounding_rules.md", model.prompts.runtimeGroundingRules)}
-          ${promptCard("Recommendation Add-On", "Section 4 · instructions/recommendation_add_on.md", model.prompts.recommendationAddon)}
-          ${promptCard("Conversation Add-On", "Section 5 · instructions/conversation_add_on.md", model.prompts.conversationAddon)}
-          ${promptCard("Evaluation Judge Instructions", "Section 6 · instructions/evaluation_judge.md", model.prompts.evaluationJudge)}
+          ${promptSpecs.map(promptCard).join("")}
           <div class="eval-approval-gate ${model.promptApproved ? "approved" : ""}">
             ${model.promptApproved
               ? `<div><strong>Prompt review approved</strong><span>${escapeHtml(dateTime(model.approvedAt))} · Expires automatically if the instructions or cases change.</span></div><button type="button" data-eval-action="revoke-approval">Revoke approval</button>`
@@ -718,6 +755,16 @@
           </div>
         </div>
       </aside>
+      ${selectedPrompt ? `<section class="eval-instruction-fullscreen" role="dialog" aria-modal="true" aria-labelledby="fullScreenInstructionTitle">
+        <header>
+          <div>
+            <span>${escapeHtml(selectedPrompt.description)}</span>
+            <h3 id="fullScreenInstructionTitle">${escapeHtml(selectedPrompt.title)}</h3>
+          </div>
+          <button class="eval-instruction-fullscreen-close" type="button" data-eval-action="close-instruction-fullscreen" data-instruction-key="${escapeHtml(selectedPrompt.key)}" aria-label="Close full-screen instruction">×</button>
+        </header>
+        <pre>${escapeHtml(selectedPrompt.prompt)}</pre>
+      </section>` : ""}
     </div>`;
   }
 
