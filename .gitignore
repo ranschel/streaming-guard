@@ -1,0 +1,32 @@
+# Local operating metadata
+.DS_Store
+**/.DS_Store
+.agents/
+.codex/
+.openai/
+AGENTS.md
+sources/
+
+# Local synchronization and work records
+scripts/sync-project.sh
+todo/project_sync.md
+todo/project_time_log.md
+
+# Private production planning
+todo/streaming_guard_production_fast_follows.md
+
+# Local secrets and machine-specific configuration
+.env
+.env.*
+!.env.example
+*.local
+
+# Local runtime and exported artifacts
+*.log
+*.jsonl
+browser_state/
+evaluation_exports/
+exports/
+dist/
+
+deploy-companion/

@@ -1,0 +1,16 @@
+{
+  "household_id": "HH-001",
+  "household_name": "Vale Household",
+  "prototype_record": true,
+  "authorized_adult_member_id": "MEM-001",
+  "territory": "US",
+  "billing_region": "California",
+  "monthly_streaming_budget_cap": 75,
+  "currency": "USD",
+  "locale": "en-US",
+  "prices_include_tax": false,
+  "advertising_tolerance": "limited",
+  "resolution_preference": "4K for shared movie nights; 2K otherwise",
+  "default_decision_owner": "authorized adult",
+  "profile_updated_at": "2026-08-15"
+}

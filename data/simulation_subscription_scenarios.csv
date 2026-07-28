@@ -1,0 +1,31 @@
+case_id,scenario_subscription_id,household_id,service_id,plan_id,status,monthly_cost,billing_cadence,next_renewal_date,prepaid_through,promotion_or_bundle,commitment_terms,cancellation_consequences,record_updated_at,post_cancellation_monthly_cost,forfeited_value
+SG-001,SIM-001-A,HH-001,SVC-VIEWFLIX,PLAN-VIEWFLIX-M,active,8.99,monthly,2026-08-25,,none,month-to-month,"access through paid period",2026-08-14
+SG-001,SIM-001-B,HH-001,SVC-FAMILYARC,PLAN-FAMILYARC-ADS,active,11.99,monthly,2026-08-30,,none,month-to-month,"access through paid period",2026-08-14
+SG-001,SIM-001-C,HH-001,SVC-CIVICLIVE,PLAN-CIVICLIVE-ADS,active,9.99,monthly,2026-08-27,,none,month-to-month,"access through paid period",2026-08-14
+SG-001,SIM-001-D,HH-001,SVC-PINNACLE,PLAN-PINNACLE-M,active,18.99,monthly,2026-09-01,,none,month-to-month,"access through paid period",2026-08-14
+SG-001,SIM-001-E,HH-001,SVC-AURORA,PLAN-AURORA-M,active,12.99,monthly,2026-08-21,,none,month-to-month,"access through paid period",2026-08-14
+SG-002,SIM-002-A,HH-001,SVC-VIEWFLIX,PLAN-VIEWFLIX-M,active,8.99,monthly,2026-07-28,,none,month-to-month,"access through paid period",2026-07-20
+SG-002,SIM-002-B,HH-001,SVC-FAMILYARC,PLAN-FAMILYARC-ADS,active,11.99,monthly,2026-08-02,,none,month-to-month,"access through paid period",2026-07-20
+SG-002,SIM-002-C,HH-001,SVC-CIVICLIVE,PLAN-CIVICLIVE-ADS,active,9.99,monthly,2026-07-30,,none,month-to-month,"access through paid period",2026-07-20
+SG-002,SIM-002-D,HH-001,SVC-PINNACLE,PLAN-PINNACLE-M,active,18.99,monthly,2026-08-04,,none,month-to-month,"access through paid period",2026-07-20
+SG-002,SIM-002-E,HH-001,SVC-ORBIT,PLAN-ORBIT-M,active,12.99,monthly,2026-07-24,,none,month-to-month,"access through paid period",2026-07-20
+SG-003,SIM-003-A,HH-001,SVC-TRIO,PLAN-TRIO-BUNDLE,active,32.99,monthly,2026-08-01,2026-08-15,"three-service bundle; $20.00 prepaid promotional credit",month-to-month bundle,"removing any component ends bundle; remaining two services cost $37.98/month; $20.00 promotional credit is forfeited",2026-07-21,37.98,20.00
+SG-004,SIM-004-A,HH-001,SVC-VIEWFLIX,PLAN-VIEWFLIX-M,active,8.99,monthly,2026-07-28,,none,month-to-month,"access through paid period",2026-07-22
+SG-004,SIM-004-B,HH-001,SVC-FAMILYARC,PLAN-FAMILYARC-ADS,active,11.99,monthly,2026-08-02,,none,month-to-month,"access through paid period",2026-07-22
+SG-004,SIM-004-C,HH-001,SVC-CIVICLIVE,PLAN-CIVICLIVE-ADS,active,9.99,monthly,2026-07-30,,none,month-to-month,"access through paid period",2026-07-22
+SG-004,SIM-004-D,HH-001,SVC-PINNACLE,PLAN-PINNACLE-M,active,18.99,monthly,2026-08-04,,none,month-to-month,"access through paid period",2026-07-22
+SG-004,SIM-004-E,HH-001,SVC-SUMMIT,PLAN-SUMMIT-M,not_subscribed,0.00,monthly,,,none,month-to-month,"no existing subscription",2026-07-22,,
+SG-005,SIM-005-A,HH-001,SVC-VIEWFLIX,PLAN-VIEWFLIX-M,active,8.99,monthly,2026-08-05,,none,month-to-month,"access through paid period",2026-07-21
+SG-005,SIM-005-B,HH-001,SVC-TIDE,PLAN-TIDE-M,not_subscribed,0.00,monthly,,,none,month-to-month,"no existing subscription",2026-07-21
+SG-006,SIM-006-A,HH-001,SVC-VIEWFLIX,PLAN-VIEWFLIX-M,active,8.99,monthly,2026-08-28,,none,month-to-month,"access through paid period",2026-08-02
+SG-006,SIM-006-B,HH-001,SVC-FAMILYARC,PLAN-FAMILYARC-ADS,active,11.99,monthly,2026-09-02,,none,month-to-month,"access through paid period",2026-08-02
+SG-006,SIM-006-C,HH-001,SVC-CIVICLIVE,PLAN-CIVICLIVE-ADS,active,9.99,monthly,2026-08-30,,none,month-to-month,"access through paid period",2026-08-02
+SG-006,SIM-006-D,HH-001,SVC-PINNACLE,PLAN-PINNACLE-M,active,18.99,monthly,2026-09-04,,none,month-to-month,"access through paid period",2026-08-02
+SG-006,SIM-006-E,HH-001,SVC-EMBER,PLAN-EMBER-M,not_subscribed,0.00,monthly,,,none,month-to-month,"no existing subscription",2026-08-02
+SG-007,SIM-007-A,HH-001,SVC-MEADOW,PLAN-MEADOW-M,active,15.99,monthly,2026-08-19,,none,month-to-month,"pause allowed for up to 60 days; library and profile retained",2026-08-11
+SG-008,SIM-008-A,HH-001,SVC-NORTHLIGHT,PLAN-NORTHLIGHT-M,not_subscribed,0.00,monthly,,,none,month-to-month,"no existing subscription",2026-08-19
+SG-009,SIM-009-A,HH-001,SVC-LANTERN,PLAN-LANTERN-M,not_subscribed,0.00,monthly,,,none,month-to-month,"no existing subscription",2026-09-01
+SG-010,SIM-010-A,HH-001,SVC-CHORUS,PLAN-CHORUS-M,not_subscribed,0.00,monthly,,,none,month-to-month,"no existing subscription",2026-09-13
+SG-011,SIM-011-A,HH-001,SVC-CEDAR,PLAN-CEDAR-A,active,10.00,annual,2027-07-01,2027-07-01,none,"annual prepaid; $119.99 paid 2026-07-01","cancellation stops future renewal but provides no prorated refund or immediate savings",2026-09-30
+SG-012,SIM-012-A,HH-001,SVC-QUIET,PLAN-QUIET-M,active,9.99,monthly,2026-11-08,,none,month-to-month,"access through paid period",2026-10-08
+SG-013,SIM-013-A,HH-001,SVC-CIVICLIVE,PLAN-CIVICLIVE-ADS,active,9.99,monthly,2026-11-10,,none,month-to-month,"pause up to 12 weeks; cancel anytime",2026-10-09
