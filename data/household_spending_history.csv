@@ -1,0 +1,37 @@
+household_id,month_offset,total_monthly_spend,recommendation_savings,change_note
+HH-001,-35,38.97,0.00,Tracking started with three active services
+HH-001,-34,38.97,0.00,No monthly change
+HH-001,-33,44.96,0.00,Added a seasonal service
+HH-001,-32,44.96,5.99,First Streaming Guard cancellation took effect
+HH-001,-31,44.96,5.99,Recommendation savings continued
+HH-001,-30,44.96,5.99,Recommendation savings continued
+HH-001,-29,52.95,5.99,Added a family plan
+HH-001,-28,52.95,5.99,No monthly change
+HH-001,-27,52.95,5.99,No monthly change
+HH-001,-26,60.94,5.99,Added a sports service
+HH-001,-25,60.94,17.98,Two prior recommendations continued saving money
+HH-001,-24,48.95,17.98,Sports service canceled after its season
+HH-001,-23,48.95,17.98,Recommendation savings continued
+HH-001,-22,56.94,23.97,Another unused service was canceled
+HH-001,-21,56.94,23.97,Recommendation savings continued
+HH-001,-20,50.95,23.97,Changed to a lower-cost plan
+HH-001,-19,50.95,23.97,Recommendation savings continued
+HH-001,-18,50.95,23.97,Recommendation savings continued
+HH-001,-17,58.94,23.97,Added a documentary service
+HH-001,-16,58.94,23.97,No monthly change
+HH-001,-15,58.94,29.96,Plan-change savings took effect
+HH-001,-14,66.93,29.96,Added a seasonal service
+HH-001,-13,66.93,29.96,No monthly change
+HH-001,-12,54.94,41.95,Seasonal service canceled after viewing was completed
+HH-001,-11,43.96,41.95,Removed another unused service
+HH-001,-10,43.96,41.95,Recommendation savings continued
+HH-001,-9,51.95,41.95,Added a family plan
+HH-001,-8,51.95,41.95,No monthly change
+HH-001,-7,59.94,41.95,Added a sports service
+HH-001,-6,59.94,41.95,No monthly change
+HH-001,-5,71.93,41.95,Temporary premium subscription
+HH-001,-4,58.94,54.94,Premium subscription canceled after viewing was completed
+HH-001,-3,58.94,54.94,Recommendation savings continued
+HH-001,-2,62.95,54.94,Plan and subscription changes
+HH-001,-1,62.95,54.94,Recommendation savings continued
+HH-001,0,62.95,54.94,Current household spending and realized monthly savings

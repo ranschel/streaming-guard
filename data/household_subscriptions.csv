@@ -1,0 +1,6 @@
+subscription_id,household_id,service_id,plan_id,status,monthly_cost,billing_cadence,next_renewal_date,renewal_status,expiration_date,prepaid_through,promotion_or_bundle,commitment_terms,cancellation_consequences,record_updated_at
+SUB-CURRENT-VIEWFLIX,HH-001,SVC-VIEWFLIX,PLAN-VIEWFLIX-M,active,8.99,monthly,2026-08-25,auto_renew,,,none,month-to-month,"access through paid period",2026-08-15
+SUB-CURRENT-FAMILYARC,HH-001,SVC-FAMILYARC,PLAN-FAMILYARC-ADS,active,11.99,monthly,2026-08-30,auto_renew,,,none,month-to-month,"access through paid period",2026-08-15
+SUB-CURRENT-CIVICLIVE,HH-001,SVC-CIVICLIVE,PLAN-CIVICLIVE-ADS,active,9.99,monthly,,non_renewing,2026-08-27,,none,month-to-month,"cancellation already scheduled; access remains available through expiration",2026-08-15
+SUB-CURRENT-PINNACLE,HH-001,SVC-PINNACLE,PLAN-PINNACLE-M,active,18.99,monthly,2026-09-01,auto_renew,,,none,month-to-month,"access through paid period",2026-08-15
+SUB-CURRENT-AURORA,HH-001,SVC-AURORA,PLAN-AURORA-M,active,12.99,monthly,2026-08-21,auto_renew,,,none,month-to-month,"access through paid period",2026-08-15

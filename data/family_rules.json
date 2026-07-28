@@ -1,0 +1,17 @@
+{
+  "household_id": "HH-001",
+  "priority_policy": "High-priority titles carry more weight, subject to the current budget, content, contract, and data-quality rules.",
+  "content_limits": [
+    {
+      "member_id": "MEM-004",
+      "television_limit": "TV-G or TV-PG",
+      "movie_limit": "G or PG"
+    },
+    {
+      "member_id": "MEM-003",
+      "television_limit": "Through TV-14",
+      "movie_limit": "Through PG-13"
+    }
+  ],
+  "additional_escalations": []
+}
