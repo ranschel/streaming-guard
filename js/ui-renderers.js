@@ -1,9 +1,9 @@
 (function initializeUiRenderers(global) {
   "use strict";
 
-  const math = global.SubscriptionGuardMath;
-  const engine = global.SubscriptionGuardRecommendationEngine;
-  const llm = global.SubscriptionGuardOpenAI;
+  const math = global.StreamingGuardMath;
+  const engine = global.StreamingGuardRecommendationEngine;
+  const llm = global.StreamingGuardOpenAI;
 
   function modelSourceLabel(model) {
     const info = llm?.modelInfo(model);
@@ -982,7 +982,7 @@
     </div>`;
   }
 
-  global.SubscriptionGuardUI = Object.freeze({
+  global.StreamingGuardUI = Object.freeze({
     escapeHtml,
     welcomeMarkup,
     messageMarkup,

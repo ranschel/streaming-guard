@@ -42,11 +42,11 @@ for (const file of [
   vm.runInContext(fs.readFileSync(file, "utf8"), sandbox, { filename: file });
 }
 
-const knowledge = window.SubscriptionGuardKnowledge;
-const context = window.SubscriptionGuardContext;
-const engine = window.SubscriptionGuardRecommendationEngine;
-const client = window.SubscriptionGuardOpenAI;
-const ui = window.SubscriptionGuardUI;
+const knowledge = window.StreamingGuardKnowledge;
+const context = window.StreamingGuardContext;
+const engine = window.StreamingGuardRecommendationEngine;
+const client = window.StreamingGuardOpenAI;
+const ui = window.StreamingGuardUI;
 const indexMarkup = fs.readFileSync("index.html", "utf8");
 const stylesheet = fs.readFileSync("css/streaming-guard.css", "utf8");
 const applicationSource = fs.readFileSync("js/app.js", "utf8");
@@ -55,19 +55,19 @@ const clientSource = fs.readFileSync("js/openai-client.js", "utf8");
 const stylesheetSource = fs.readFileSync("css/streaming-guard.css", "utf8");
 
 assert.equal(
-  window.SubscriptionGuardMemory.containsSensitiveAccountInformation("My password is hunter2"),
+  window.StreamingGuardMemory.containsSensitiveAccountInformation("My password is hunter2"),
   true
 );
 assert.equal(
-  window.SubscriptionGuardMemory.containsSensitiveAccountInformation("I forgot my password"),
+  window.StreamingGuardMemory.containsSensitiveAccountInformation("I forgot my password"),
   false
 );
 assert.equal(
-  window.SubscriptionGuardMemory.containsSensitiveAccountInformation("Cancel Aurora+ before renewal"),
+  window.StreamingGuardMemory.containsSensitiveAccountInformation("Cancel Aurora+ before renewal"),
   false
 );
 assert.equal(
-  window.SubscriptionGuardMemory.sensitiveMessagePlaceholder,
+  window.StreamingGuardMemory.sensitiveMessagePlaceholder,
   "[Sensitive information removed from local chat history.]"
 );
 assert(applicationSource.includes("persistAdultMessage(text, turn.safetyDisposition)"));
@@ -159,7 +159,7 @@ assert(knowledge.recommendationAddon.includes("distinguish the adult’s action 
 assert(knowledge.recommendationAddon.includes("starting the subscription exactly one day before"));
 assert(knowledge.recommendationAddon.includes("Never recommend a subscription start date in the past"));
 
-const subscriptionChangeImpact = window.SubscriptionGuardMath.calculateSubscriptionChangeImpact({
+const subscriptionChangeImpact = window.StreamingGuardMath.calculateSubscriptionChangeImpact({
   beforeMonthly: 62.95,
   afterMonthly: 79.94,
   monthlyBudgetCap: 75
@@ -265,7 +265,7 @@ assert(applicationSource.includes("Math.min(preservedScrollTop, maximumScrollTop
 assert(!applicationSource.includes("messagesElement.scrollTop = messagesElement.scrollHeight"));
 assert(applicationSource.includes('"household_request"'));
 assert(stylesheet.includes(".demo-trigger-grid {"));
-const demoWelcomeMarkup = window.SubscriptionGuardUI.welcomeMarkup();
+const demoWelcomeMarkup = window.StreamingGuardUI.welcomeMarkup();
 assert(demoWelcomeMarkup.includes("Run daily background sweep"));
 assert(demoWelcomeMarkup.includes("Review a new subscription request"));
 assert(demoWelcomeMarkup.includes("Enter a manual scenario"));
@@ -282,17 +282,17 @@ assert(stylesheet.includes(".manual-scenario-button"));
 
 const manualScenarioState = context.createSeedState("SG-001");
 manualScenarioState.review.manualScenario = true;
-assert(window.SubscriptionGuardUI.detailMarkup(manualScenarioState, null).includes("Manual scenario ready"));
+assert(window.StreamingGuardUI.detailMarkup(manualScenarioState, null).includes("Manual scenario ready"));
 
 const progressiveState = context.createSeedState("SG-001");
 progressiveState.review.started = true;
 progressiveState.review.progressStage = "trigger";
-assert.equal((window.SubscriptionGuardUI.progressMarkup(progressiveState).match(/class="progress-step/g) || []).length, 1);
+assert.equal((window.StreamingGuardUI.progressMarkup(progressiveState).match(/class="progress-step/g) || []).length, 1);
 progressiveState.review.progressStage = "model_request";
-assert.equal((window.SubscriptionGuardUI.progressMarkup(progressiveState).match(/class="progress-step/g) || []).length, 2);
+assert.equal((window.StreamingGuardUI.progressMarkup(progressiveState).match(/class="progress-step/g) || []).length, 2);
 progressiveState.review.progressStage = "external_action";
-assert.equal((window.SubscriptionGuardUI.progressMarkup(progressiveState).match(/class="progress-step/g) || []).length, 5);
-const waitingActivityMarkup = window.SubscriptionGuardUI.llmActivityMarkup({
+assert.equal((window.StreamingGuardUI.progressMarkup(progressiveState).match(/class="progress-step/g) || []).length, 5);
+const waitingActivityMarkup = window.StreamingGuardUI.llmActivityMarkup({
   status: "waiting",
   provider: "OpenAI",
   model: "GPT-5.6 Terra",
@@ -410,14 +410,14 @@ for (const record of knowledge.agentEvals) {
 
 {
   const noChangeSignals = Object.fromEntries(
-    window.SubscriptionGuardAgentTools.sweepSignalKeys.map(key => [key, false])
+    window.StreamingGuardAgentTools.sweepSignalKeys.map(key => [key, false])
   );
-  const noChange = window.SubscriptionGuardAgentTools.evaluateSweepSignals(noChangeSignals);
+  const noChange = window.StreamingGuardAgentTools.evaluateSweepSignals(noChangeSignals);
   assert.equal(noChange.status, "no_action");
   assert.equal(noChange.shouldNotify, false);
   assert.deepEqual(Array.from(noChange.materialSignals), []);
 
-  const changed = window.SubscriptionGuardAgentTools.evaluateSweepSignals({
+  const changed = window.StreamingGuardAgentTools.evaluateSweepSignals({
     ...noChangeSignals,
     availabilityChange: true
   });
@@ -426,7 +426,7 @@ for (const record of knowledge.agentEvals) {
   assert.deepEqual(Array.from(changed.materialSignals), ["availabilityChange"]);
 
   assert.throws(
-    () => window.SubscriptionGuardAgentTools.evaluateSweepSignals({ availabilityChange: false }),
+    () => window.StreamingGuardAgentTools.evaluateSweepSignals({ availabilityChange: false }),
     /Sweep signals are incomplete/
   );
 }
@@ -1249,7 +1249,7 @@ async function runSuite(
     setItem: (key, value) => suiteStorageMemory.set(key, String(value)),
     removeItem: key => suiteStorageMemory.delete(key)
   };
-  const runner = window.SubscriptionGuardEvaluations.createEvaluationRunner({
+  const runner = window.StreamingGuardEvaluations.createEvaluationRunner({
     knowledge,
     context,
     engine,
@@ -1292,7 +1292,7 @@ async function runSuite(
     assert(item.humanReadableInput.includes("\n\nWhat a correct response must accomplish:\n"), `${label}: ${item.eval_id} omitted the expected-outcome separator`);
     assert(!item.humanReadableOutput.includes("[object Object]"), `${label}: ${item.eval_id} returned an unreadable output`);
   });
-  const evaluationMarkup = window.SubscriptionGuardUI.evaluationMarkup(regraded);
+  const evaluationMarkup = window.StreamingGuardUI.evaluationMarkup(regraded);
   assert(evaluationMarkup.includes("Human-readable input and output"), `${label}: manual-review panel was not rendered`);
   assert(evaluationMarkup.includes("Human-readable input"), `${label}: readable input column was not rendered`);
   assert(evaluationMarkup.includes("Human-readable output"), `${label}: readable output column was not rendered`);
@@ -1313,7 +1313,7 @@ async function runSuite(
     evaluationMarkup.indexOf('data-eval-action="clear-results"') < evaluationMarkup.indexOf('class="eval-more-menu"'),
     `${label}: clear-results action was not kept prominent`
   );
-  const runningEvaluationMarkup = window.SubscriptionGuardUI.evaluationMarkup({
+  const runningEvaluationMarkup = window.StreamingGuardUI.evaluationMarkup({
     ...regraded,
     runningAll: true,
     runningEvalId: "EVAL-01"
@@ -1334,7 +1334,7 @@ async function runSuite(
     6,
     `${label}: every instruction section did not receive a full-screen action`
   );
-  const fullScreenInstructionMarkup = window.SubscriptionGuardUI.evaluationMarkup({
+  const fullScreenInstructionMarkup = window.StreamingGuardUI.evaluationMarkup({
     ...regraded,
     selectedEvalId: "EVAL-01",
     instructionsOpen: true,
@@ -1355,7 +1355,7 @@ async function runSuite(
       delete result.judgment;
     });
     suiteStorage.setItem(runner.storageKey, JSON.stringify(savedState));
-    const compatibleRunner = window.SubscriptionGuardEvaluations.createEvaluationRunner({
+    const compatibleRunner = window.StreamingGuardEvaluations.createEvaluationRunner({
       knowledge,
       context,
       engine,
@@ -1387,7 +1387,7 @@ const noActionStorage = {
   setItem: (key, value) => noActionStorageMemory.set(key, String(value)),
   removeItem: key => noActionStorageMemory.delete(key)
 };
-const noActionRunner = window.SubscriptionGuardEvaluations.createEvaluationRunner({
+const noActionRunner = window.StreamingGuardEvaluations.createEvaluationRunner({
   knowledge,
   context,
   engine,
@@ -1399,7 +1399,7 @@ const noActionRunner = window.SubscriptionGuardEvaluations.createEvaluationRunne
   ),
   sweepEvaluator(signals) {
     noActionCallTracker.detector = (noActionCallTracker.detector || 0) + 1;
-    return window.SubscriptionGuardAgentTools.evaluateSweepSignals(signals);
+    return window.StreamingGuardAgentTools.evaluateSweepSignals(signals);
   },
   storage: noActionStorage
 });
@@ -1557,7 +1557,7 @@ await runSuite(
   };
   const roleAwareOpenAI = createMockOpenAI(fixture => fixture);
   roleAwareOpenAI.readSettings = () => ({ ...selectedRoles });
-  const roleRunner = window.SubscriptionGuardEvaluations.createEvaluationRunner({
+  const roleRunner = window.StreamingGuardEvaluations.createEvaluationRunner({
     knowledge,
     context,
     engine,
@@ -1590,7 +1590,7 @@ await runSuite(
       reject(error);
     }, { once: true });
   });
-  const stopRunner = window.SubscriptionGuardEvaluations.createEvaluationRunner({
+  const stopRunner = window.StreamingGuardEvaluations.createEvaluationRunner({
     knowledge,
     context,
     engine,
@@ -1629,7 +1629,7 @@ rejectedOutputMock.createRecommendation = async ({ state, decisionPacket }) => {
     usage: null
   };
 };
-const rejectedOutputRunner = window.SubscriptionGuardEvaluations.createEvaluationRunner({
+const rejectedOutputRunner = window.StreamingGuardEvaluations.createEvaluationRunner({
   knowledge,
   context,
   engine,
@@ -1654,7 +1654,7 @@ const legacyStorage = {
   setItem(_key, value) { this.value = value; },
   removeItem() { this.value = null; }
 };
-const legacyStore = window.SubscriptionGuardMemory.createMemoryStore({
+const legacyStore = window.StreamingGuardMemory.createMemoryStore({
   storageKey: "legacy",
   createSeedState: () => context.createSeedState("SG-005"),
   storage: legacyStorage
@@ -1678,7 +1678,7 @@ const sensitiveChatStorage = {
   setItem(_key, value) { this.value = value; },
   removeItem() { this.value = null; }
 };
-const sensitiveChatStore = window.SubscriptionGuardMemory.createMemoryStore({
+const sensitiveChatStore = window.StreamingGuardMemory.createMemoryStore({
   storageKey: "sensitive-chat",
   createSeedState: context.createSeedState,
   storage: sensitiveChatStorage
@@ -1711,7 +1711,7 @@ const legacyUrlStorage = {
   setItem(_key, value) { this.value = value; },
   removeItem() { this.value = null; }
 };
-const legacyUrlStore = window.SubscriptionGuardMemory.createMemoryStore({
+const legacyUrlStore = window.StreamingGuardMemory.createMemoryStore({
   storageKey: "legacy-urls",
   createSeedState: context.createSeedState,
   storage: legacyUrlStorage
@@ -1741,7 +1741,7 @@ const failedConfirmationStorage = {
   setItem(_key, value) { this.value = value; },
   removeItem() { this.value = null; }
 };
-const recoveredConfirmationStore = window.SubscriptionGuardMemory.createMemoryStore({
+const recoveredConfirmationStore = window.StreamingGuardMemory.createMemoryStore({
   storageKey: "failed-confirmation",
   createSeedState: context.createSeedState,
   storage: failedConfirmationStorage
@@ -1755,7 +1755,7 @@ assert(applicationSource.includes('turn.outcome === "external_action_confirmed"'
 assert(applicationSource.includes('draft.review.discussionStatus = "external_action_pending"'));
 
 const scenarioSwitchMemory = new Map();
-const scenarioSwitchStore = window.SubscriptionGuardMemory.createMemoryStore({
+const scenarioSwitchStore = window.StreamingGuardMemory.createMemoryStore({
   storageKey: "scenario-switch",
   createSeedState: context.createSeedState,
   storage: {
@@ -1774,7 +1774,7 @@ scenarioSwitchStore.transact(draft => {
 assert.equal(scenarioSwitchStore.reload().scenario.triggerType, "household_request");
 
 const generalChatMemory = new Map();
-const generalChatStore = window.SubscriptionGuardMemory.createMemoryStore({
+const generalChatStore = window.StreamingGuardMemory.createMemoryStore({
   storageKey: "general-chat-updates",
   createSeedState: context.createSeedState,
   storage: {
@@ -1786,7 +1786,7 @@ const generalChatStore = window.SubscriptionGuardMemory.createMemoryStore({
 generalChatStore.transact(draft => {
   context.rebaseStateDates(draft, "2026-08-15");
 });
-const generalChatTools = window.SubscriptionGuardAgentTools.createAgentTools({
+const generalChatTools = window.StreamingGuardAgentTools.createAgentTools({
   memory: generalChatStore,
   knowledge,
   clock: () => "2026-08-15T12:00:00.000Z"
@@ -1812,7 +1812,7 @@ assert.equal(summitSubscription.status, "active");
 assert.equal(summitSubscription.monthlyCost, 16.99);
 assert.equal(
   generalChatState.householdSpendingHistory.find(record => Number(record.monthOffset) === 0).totalMonthlySpend,
-  window.SubscriptionGuardMath.roundCurrency(baselineMonthlySpend + 16.99)
+  window.StreamingGuardMath.roundCurrency(baselineMonthlySpend + 16.99)
 );
 assert.equal(generalChatState.subscriptionChangeLog.length, 1);
 

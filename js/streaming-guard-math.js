@@ -1,4 +1,4 @@
-(function initializeSubscriptionGuardMath(global) {
+(function initializeStreamingGuardMath(global) {
   "use strict";
 
   const DEFAULT_LOCALE = "en-US";
@@ -271,7 +271,7 @@
     return date.toISOString().slice(0, 10);
   }
 
-  global.SubscriptionGuardMath = Object.freeze({
+  global.StreamingGuardMath = Object.freeze({
     roundCurrency,
     formatCurrency,
     sumMonthlyCosts,

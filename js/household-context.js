@@ -1,9 +1,9 @@
 (function initializeHouseholdContext(global) {
   "use strict";
 
-  const knowledge = global.SubscriptionGuardKnowledge;
-  const config = global.SubscriptionGuardScenarioConfig;
-  const math = global.SubscriptionGuardMath;
+  const knowledge = global.StreamingGuardKnowledge;
+  const config = global.StreamingGuardScenarioConfig;
+  const math = global.StreamingGuardMath;
   if (!knowledge || !config || !math) throw new Error("Streaming Guard context dependencies failed to load.");
 
   function clone(value) {
@@ -421,7 +421,7 @@
     return rebased;
   }
 
-  global.SubscriptionGuardContext = Object.freeze({
+  global.StreamingGuardContext = Object.freeze({
     knowledge,
     config,
     createSeedState: createScenarioState,

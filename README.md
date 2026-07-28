@@ -8,7 +8,7 @@ Streaming Guard is an advisory agent prototype that helps a household decide whe
 
 It brings together subscription costs, renewal dates, viewing confirmations, watchlist priorities, release schedules, household preferences, and family rules to produce one clear recommendation for an adult to review.
 
-> **Prototype status:** Develop phase. The browser demo is functional and persistent, can connect directly to OpenAI, Anthropic, or Google Gemini for live recommendations and conversation, and remains disconnected from external streaming accounts.
+> **Prototype status:** Develop phase complete. The browser demo is functional and persistent, can connect directly to OpenAI, Anthropic, or Google Gemini for live recommendations and conversation, and remains disconnected from external streaming accounts.
 
 ## What the prototype demonstrates
 
@@ -102,7 +102,10 @@ The CSV, JSON, policy, and LLM-instruction files remain the editable sources of 
 │   ├── recommendation-engine.js
 │   ├── scenario-config.js
 │   ├── streaming-guard-math.js
-│   └── ui-renderers.js
+│   ├── ui-renderers.js
+│   └── vendor/
+│       ├── html2canvas.LICENSE.txt
+│       └── html2canvas.min.js
 ├── data/
 │   ├── agent_evals.csv
 │   ├── eval_cases.csv
@@ -125,8 +128,13 @@ The CSV, JSON, policy, and LLM-instruction files remain the editable sources of 
 │   └── evaluation_judge.md
 ├── policies/
 │   └── family_rules.md
+├── evals/
+│   ├── final_evaluation_results.md
+│   └── final_evaluation_summary.md
 ├── scripts/
-│   └── build-knowledge.mjs
+│   ├── build-knowledge.mjs
+│   ├── build-sites-static.mjs
+│   └── verify-keep-only.mjs
 ├── prd/
 │   └── streaming_guard_prd.md
 └── todo/
@@ -236,6 +244,7 @@ Automated verdicts report only what the five explicit checks establish for each 
 - [Conversation Add-On](instructions/conversation_add_on.md)
 - [Evaluation Judge Instructions](instructions/evaluation_judge.md)
 - [Final Evaluation Summary](evals/final_evaluation_summary.md)
+- [Complete Final Evaluation Results](evals/final_evaluation_results.md)
 - [Household rules](policies/family_rules.md)
 - [Prototype fast-follow tracker](todo/streaming_guard_fast_follows.md)
 
@@ -267,7 +276,7 @@ See GitHub’s official [publishing-source documentation](https://docs.github.co
 
 The final current ten-case hybrid evaluation completed under prompt hash `4a31838f`: all ten cases passed with zero failures, API errors, or material judge gaps. Nine cases used `gpt-5.6-terra` for the agent response and `gpt-5.6-luna` for independent judging; EVAL-07 used the shared deterministic signal detector and made no provider call. The set covers cancellation, missing information, bundle economics, execution refusal, catalog migration, billing escalation, shared-detector no-action restraint, subscription timing, duration-aware pause, and child-rating exceptions.
 
-The [prototype fast-follow tracker](todo/streaming_guard_fast_follows.md) is now closed with no remaining prototype items. Production infrastructure, integrations, monitoring, and decision-quality gaps are maintained separately in a private backlog that is intentionally excluded from GitHub publishing.
+The [prototype fast-follow tracker](todo/streaming_guard_fast_follows.md) is closed, the Develop phase is complete, and the final current evaluation passed all ten cases. Production infrastructure, integrations, monitoring, and decision-quality gaps are maintained separately in a private backlog that is intentionally excluded from GitHub publishing.
 
 ---
 

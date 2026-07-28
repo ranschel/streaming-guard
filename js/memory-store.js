@@ -207,7 +207,7 @@
     });
   }
 
-  global.SubscriptionGuardMemory = Object.freeze({
+  global.StreamingGuardMemory = Object.freeze({
     createMemoryStore,
     containsSensitiveAccountInformation,
     sensitiveMessagePlaceholder: SENSITIVE_MESSAGE_PLACEHOLDER

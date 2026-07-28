@@ -1,7 +1,7 @@
 (function initializeScenarioConfig(global) {
   "use strict";
 
-  global.SubscriptionGuardScenarioConfig = Object.freeze({
+  global.StreamingGuardScenarioConfig = Object.freeze({
     activeScenarioId: "SG-001",
     demoScenarios: Object.freeze({
       backgroundSweep: "SG-001",

@@ -1,6 +1,8 @@
 (function initializeOpenAIClient(global) {
   "use strict";
 
+  // Retained so provider settings saved before the product rename continue to
+  // work without forcing the user to reconnect.
   const SETTINGS_KEY = "subscriptionGuard.openai.v1";
   const DEFAULT_MODEL = "gpt-5.6-terra";
   const JUDGE_MODEL = "gpt-5.6-luna";
@@ -193,7 +195,7 @@
   }
 
   function publicHouseholdContext(state, decisionPacket, displayedRecommendation = null) {
-    const math = global.SubscriptionGuardMath;
+    const math = global.StreamingGuardMath;
     const confirmedOn = offset => Number.isFinite(offset) && state.systemDate && math
       ? math.addDays(state.systemDate, offset)
       : null;
@@ -854,7 +856,7 @@
     candidate.proposedContextUpdates
       .filter(update => update.updateType === "subscription_record")
       .forEach(update => {
-        const servicePlans = (global.SubscriptionGuardKnowledge?.services || [])
+        const servicePlans = (global.StreamingGuardKnowledge?.services || [])
           .filter(plan => plan.service_id === update.targetId);
         if (!servicePlans.length) {
           throw new Error("A subscription update must identify a known service.");
@@ -951,7 +953,7 @@
           update.field !== "contentRatingException" ||
           titleId !== update.value ||
           (!manualContext && titleId !== decisionPacket.viewingSignal.titleId) ||
-          (manualContext && !(global.SubscriptionGuardKnowledge?.catalog || []).some(title => title.title_id === titleId)) ||
+          (manualContext && !(global.StreamingGuardKnowledge?.catalog || []).some(title => title.title_id === titleId)) ||
           update.scope !== "one_time" ||
           !intendedChildIds.has(update.targetId)
         ) {
@@ -989,7 +991,7 @@
     }
     const normalizedReply = normalizeValidationText(candidate.reply);
     const suppliedUrls = normalizedReply.match(/https?:\/\/[^\s<>"')\]]+/g) || [];
-    const approvedServiceRecords = global.SubscriptionGuardKnowledge?.services || [];
+    const approvedServiceRecords = global.StreamingGuardKnowledge?.services || [];
     const approvedUrls = new Set(approvedServiceRecords.flatMap(service => [
       service.approved_account_url,
       service.approved_support_url
@@ -1097,7 +1099,7 @@
     return {
       ...candidate,
       route: requestsJudgment ? "adult_judgment_required" : "action_recommended",
-      finances: global.SubscriptionGuardRecommendationEngine.recommendationFinancesForAction(state, candidate.actionType),
+      finances: global.StreamingGuardRecommendationEngine.recommendationFinancesForAction(state, candidate.actionType),
       scenario: state.scenario
     };
   }
@@ -1195,7 +1197,7 @@
       "Current household context and displayed recommendation:",
       JSON.stringify(publicHouseholdContext(
         state,
-        global.SubscriptionGuardRecommendationEngine.buildDecisionPacket(state),
+        global.StreamingGuardRecommendationEngine.buildDecisionPacket(state),
         recommendation
       ), null, 2),
       "\nAvailable fictional service plans:",
@@ -1210,7 +1212,7 @@
         ? `\nCorrection required: the previous structured response was rejected because ${validationFeedback} Return a new response that follows the same instructions and corrects that problem.`
         : ""
     ].join("\n");
-    const decisionPacket = global.SubscriptionGuardRecommendationEngine.buildDecisionPacket(state);
+    const decisionPacket = global.StreamingGuardRecommendationEngine.buildDecisionPacket(state);
     const result = await requestResponse({
       instructions,
       input,
@@ -1314,7 +1316,7 @@
     }
   }
 
-  global.SubscriptionGuardOpenAI = Object.freeze({
+  global.StreamingGuardOpenAI = Object.freeze({
     DEFAULT_MODEL,
     JUDGE_MODEL,
     MODEL_OPTIONS,

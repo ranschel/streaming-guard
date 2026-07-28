@@ -1,6 +1,8 @@
 (function initializeEvaluationRunner(global) {
   "use strict";
 
+  // Retained for backward compatibility with evaluation results saved before
+  // the Streaming Guard product rename.
   const STORAGE_KEY = "subscriptionGuard.evaluations.v1";
   const INITIAL_EVAL_IDS = Object.freeze([
     "EVAL-01",
@@ -47,7 +49,7 @@
     context,
     engine,
     openAI,
-    sweepEvaluator = global.SubscriptionGuardAgentTools?.evaluateSweepSignals,
+    sweepEvaluator = global.StreamingGuardAgentTools?.evaluateSweepSignals,
     storage = global.localStorage,
     clock = () => new Date().toISOString()
   }) {
@@ -767,7 +769,7 @@
     });
   }
 
-  global.SubscriptionGuardEvaluations = Object.freeze({
+  global.StreamingGuardEvaluations = Object.freeze({
     createEvaluationRunner,
     initialEvalIds: INITIAL_EVAL_IDS,
     fingerprint

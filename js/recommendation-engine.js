@@ -1,7 +1,7 @@
 (function initializeRecommendationEngine(global) {
   "use strict";
 
-  const math = global.SubscriptionGuardMath;
+  const math = global.StreamingGuardMath;
   if (!math) throw new Error("Streaming Guard calculator failed to load.");
 
   const actionLanguage = Object.freeze({
@@ -667,7 +667,7 @@
     };
   }
 
-  global.SubscriptionGuardRecommendationEngine = Object.freeze({
+  global.StreamingGuardRecommendationEngine = Object.freeze({
     actionLanguage,
     buildRecommendation,
     buildDecisionPacket,

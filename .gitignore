@@ -28,3 +28,5 @@ browser_state/
 evaluation_exports/
 exports/
 dist/
+
+deploy-companion/

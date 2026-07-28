@@ -1,19 +1,21 @@
-(function initializeSubscriptionGuardApp(global) {
+(function initializeStreamingGuardApp(global) {
   "use strict";
 
-  const context = global.SubscriptionGuardContext;
-  const math = global.SubscriptionGuardMath;
-  const engine = global.SubscriptionGuardRecommendationEngine;
-  const ui = global.SubscriptionGuardUI;
-  const memoryFactory = global.SubscriptionGuardMemory;
-  const toolFactory = global.SubscriptionGuardAgentTools;
-  const openAI = global.SubscriptionGuardOpenAI;
-  const evaluationFactory = global.SubscriptionGuardEvaluations;
+  const context = global.StreamingGuardContext;
+  const math = global.StreamingGuardMath;
+  const engine = global.StreamingGuardRecommendationEngine;
+  const ui = global.StreamingGuardUI;
+  const memoryFactory = global.StreamingGuardMemory;
+  const toolFactory = global.StreamingGuardAgentTools;
+  const openAI = global.StreamingGuardOpenAI;
+  const evaluationFactory = global.StreamingGuardEvaluations;
 
   if (![context, math, engine, ui, memoryFactory, toolFactory, openAI, evaluationFactory].every(Boolean)) {
     throw new Error("Streaming Guard application dependencies failed to load.");
   }
 
+  // Retain the pre-rename storage key so existing browser-local demo state
+  // survives the product rename from Subscription Guard to Streaming Guard.
   const memory = memoryFactory.createMemoryStore({
     storageKey: "subscriptionGuard.v7",
     createSeedState: context.createSeedState
@@ -87,9 +89,9 @@
     terms: {
       title: "Terms of Use",
       content: `
-        <p><strong>Last updated: July 24, 2026</strong></p>
+        <p><strong>Last updated: July 28, 2026</strong></p>
         <h3>Educational prototype</h3>
-        <p>This site is a private course prototype provided for demonstration and evaluation. It is not a production subscription-management service.</p>
+        <p>This site is an educational course prototype provided for demonstration and evaluation. It is not a production subscription-management service.</p>
         <h3>Your responsibility</h3>
         <ul>
           <li>You remain responsible for every streaming purchase, cancellation, pause, payment, plan change, and parental-control decision.</li>
@@ -107,7 +109,7 @@
     privacy: {
       title: "Privacy Policy",
       content: `
-        <p><strong>Last updated: July 24, 2026</strong></p>
+        <p><strong>Last updated: July 28, 2026</strong></p>
         <h3>Data stored in this browser</h3>
         <p>Prototype household context, chat history, recommendation progress, evaluation state, and optional provider settings are stored in this browser using local storage. Streaming Guard does not operate a project database or server that receives this local state.</p>
         <p>Adult messages are safety-classified before they become persistent chat history. Messages identified as sensitive or outside Streaming Guard’s scope are replaced with neutral redaction notices, and an unclassified message is discarded if the selected model cannot respond safely. Obvious credentials and payment details are blocked locally before any model request. Previously saved messages containing recognizable credentials are redacted when local state is loaded.</p>
@@ -743,7 +745,7 @@
     if (update.updateType === "external_action_confirmation") {
       const recommendation = currentRecommendation();
       const selectedAction = recommendation?.actionType;
-      const expectedStatus = global.SubscriptionGuardScenarioConfig.actionCompletionStatus[selectedAction];
+      const expectedStatus = global.StreamingGuardScenarioConfig.actionCompletionStatus[selectedAction];
       if (
         turn.outcome !== "external_action_confirmed" ||
         !expectedStatus ||
@@ -792,7 +794,7 @@
   }
 
   const CHAT_REDACTION_TEXT = Object.freeze({
-    sensitive_information_warning: global.SubscriptionGuardMemory.sensitiveMessagePlaceholder,
+    sensitive_information_warning: global.StreamingGuardMemory.sensitiveMessagePlaceholder,
     out_of_scope: "[Out-of-scope message not retained.]",
     unclassified: "[Message not retained because it could not be safely classified.]"
   });
@@ -1195,7 +1197,7 @@
 
   async function runBackgroundSweep({ resetScenario = true } = {}) {
     if (resetScenario) {
-      activateDemoScenario(global.SubscriptionGuardScenarioConfig.demoScenarios.backgroundSweep, "daily_background_sweep");
+      activateDemoScenario(global.StreamingGuardScenarioConfig.demoScenarios.backgroundSweep, "daily_background_sweep");
     }
     prepareScenarioReview();
     const sequenceVersion = beginChatSequence();
@@ -1229,12 +1231,12 @@
   }
 
   async function reviewSubscriptionRequest() {
-    activateDemoScenario(global.SubscriptionGuardScenarioConfig.demoScenarios.subscriptionRequest, "household_request");
+    activateDemoScenario(global.StreamingGuardScenarioConfig.demoScenarios.subscriptionRequest, "household_request");
     prepareScenarioReview();
     const sequenceVersion = beginChatSequence();
     transact(draft => {
       draft.review.status = draft.scenario.expectedRoute;
-      draft.scenario.requestedByMemberId = global.SubscriptionGuardScenarioConfig.subscriptionRequestMemberId;
+      draft.scenario.requestedByMemberId = global.StreamingGuardScenarioConfig.subscriptionRequestMemberId;
     });
 
     const requestingMember = state.members.find(member =>
@@ -1270,7 +1272,7 @@
 
   function startManualScenario() {
     activateDemoScenario(
-      global.SubscriptionGuardScenarioConfig.demoScenarios.backgroundSweep,
+      global.StreamingGuardScenarioConfig.demoScenarios.backgroundSweep,
       "manual_scenario"
     );
     resetApiActivity();
@@ -1401,7 +1403,7 @@
 
   async function handleAdultText(text) {
     const normalized = text.toLowerCase();
-    if (global.SubscriptionGuardMemory.containsSensitiveAccountInformation(text)) {
+    if (global.StreamingGuardMemory.containsSensitiveAccountInformation(text)) {
       persistAdultMessage(text, "sensitive_information_warning");
       recordSafetyDisposition("sensitive_information_warning", "sensitive_information_detected");
       sendChat({
@@ -1519,7 +1521,7 @@
     const recommendation = currentRecommendation();
     const selectedAction = recommendation?.actionType || state.scenario.requestedAction;
     const language = engine.actionLanguage[selectedAction] || engine.actionLanguage.keep;
-    const completionStatus = global.SubscriptionGuardScenarioConfig.actionCompletionStatus[selectedAction] || "unchanged";
+    const completionStatus = global.StreamingGuardScenarioConfig.actionCompletionStatus[selectedAction] || "unchanged";
     const beforeSubscriptionBaseline = subscriptionFinancialBaseline();
     tools.update_household_context({
       updateType: "external_action_confirmation",
@@ -1589,7 +1591,7 @@
     if (action === "review-subscription-request") reviewSubscriptionRequest();
     if (action === "start-manual-scenario") startManualScenario();
     if (action === "run-check") {
-      const backgroundScenarioId = global.SubscriptionGuardScenarioConfig.demoScenarios.backgroundSweep;
+      const backgroundScenarioId = global.StreamingGuardScenarioConfig.demoScenarios.backgroundSweep;
       runBackgroundSweep({ resetScenario: state.scenario.id !== backgroundScenarioId });
     }
     if (action === "agree") handleAgree();
@@ -1880,7 +1882,7 @@
     responseController?.abort();
     responseController = null;
     memory.reset({
-      scenarioId: global.SubscriptionGuardScenarioConfig.demoScenarios.backgroundSweep
+      scenarioId: global.StreamingGuardScenarioConfig.demoScenarios.backgroundSweep
     });
     rebaseScenarioDates(math.localDateIso(new Date()));
     composerIntent = "general";
@@ -2025,7 +2027,7 @@
     }
   });
 
-  global.SubscriptionGuardApp = Object.freeze({
+  global.StreamingGuardApp = Object.freeze({
     tools,
     getState: () => memory.getState(),
     render: renderAll

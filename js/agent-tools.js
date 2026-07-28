@@ -1,8 +1,8 @@
 (function initializeAgentTools(global) {
   "use strict";
 
-  const math = global.SubscriptionGuardMath;
-  const engine = global.SubscriptionGuardRecommendationEngine;
+  const math = global.StreamingGuardMath;
+  const engine = global.StreamingGuardRecommendationEngine;
   if (!math || !engine) throw new Error("Streaming Guard tool dependencies failed to load.");
 
   const TOOL_NAMES = Object.freeze([
@@ -622,7 +622,7 @@
     });
   }
 
-  global.SubscriptionGuardAgentTools = Object.freeze({
+  global.StreamingGuardAgentTools = Object.freeze({
     createAgentTools,
     evaluateSweepSignals,
     sweepSignalKeys: SWEEP_SIGNAL_KEYS,
