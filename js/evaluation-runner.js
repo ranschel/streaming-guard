@@ -577,6 +577,7 @@
         }),
         prompts: promptBundle(),
         promptHash: currentHash(),
+        instructionsUpdatedAt: knowledge.instructionBundleUpdatedAt,
         promptApproved: promptApproved(),
         approvedAt: saved.approvedAt,
         connected: openAI.selectedModelsConfigured(settings),

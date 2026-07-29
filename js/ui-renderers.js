@@ -640,7 +640,8 @@
           day: "numeric",
           year: "numeric",
           hour: "numeric",
-          minute: "2-digit"
+          minute: "2-digit",
+          timeZoneName: "short"
         }).format(new Date(value))
       : "";
     const promptSpecs = [
@@ -795,7 +796,13 @@
       <aside class="eval-instructions-drawer" aria-label="Evaluation instructions"${model.instructionsOpen ? "" : " hidden"}>
         <header class="eval-drawer-header"><div><span>Required review gate</span><h3>Instructions</h3></div><button class="eval-drawer-close" type="button" data-eval-action="close-instructions" aria-label="Close instructions">×</button></header>
         <div class="eval-drawer-scroll">
-          <div class="eval-section-heading"><div><p>These are the exact provider-independent instruction components used by every live model call.</p></div><code>${escapeHtml(model.promptHash)}</code></div>
+          <div class="eval-section-heading">
+            <div><p>These are the exact provider-independent instruction components used by every live model call.</p></div>
+            <div class="eval-instruction-version">
+              <code>${escapeHtml(model.promptHash)}</code>
+              <small>Instructions updated ${escapeHtml(dateTime(model.instructionsUpdatedAt))}</small>
+            </div>
+          </div>
           <p class="eval-component-map">Sections 1–3 are global. Recommendation calls add section 4; conversation calls add section 5. Section 6 governs the independent judge.</p>
           ${promptSpecs.map(promptCard).join("")}
           <div class="eval-approval-gate ${model.promptApproved ? "approved" : ""}">

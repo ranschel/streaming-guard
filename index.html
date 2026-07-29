@@ -6,7 +6,7 @@
   <meta name="description" content="Streaming Guard helps households review streaming subscription recommendations while keeping every external action under adult control.">
   <link rel="icon" type="image/png" href="assets/streaming-guard-shield-256.png">
   <title>Streaming Guard</title>
-  <link rel="stylesheet" href="css/streaming-guard.css?v=20260728-3">
+  <link rel="stylesheet" href="css/streaming-guard.css?v=20260729-1">
   <link rel="stylesheet" href="css/context-trace.css?v=20260728-2">
   <link rel="stylesheet" href="css/progress-loop.css?v=20260728-1">
 </head>
@@ -25,7 +25,7 @@
       </nav>
       <button class="ai-status-button global-ai-status" id="openAISettings" type="button">
         <span class="ai-status-dot" aria-hidden="true"></span>
-        <span id="aiStatusText">Connect AI Models</span>
+        <span class="ai-status-content" id="aiStatusText">Connect AI Models</span>
       </button>
     </div>
   </header>
@@ -262,7 +262,11 @@
       <a href="#privacy" data-information-topic="privacy">Privacy Policy</a>
       <a href="#copyright" data-information-topic="copyright">Copyright</a>
     </nav>
-    <span>Private course prototype</span>
+    <span class="site-footer-status">
+      <span>Private course prototype</span>
+      <span aria-hidden="true">·</span>
+      <span>Last updated <time datetime="2026-07-29T08:52:51-07:00">July 29, 2026, 8:52 AM PDT</time></span>
+    </span>
   </footer>
 
   <script src="js/knowledge-base.js"></script>
@@ -274,9 +278,9 @@
   <script src="js/agent-tools.js"></script>
   <script src="js/context-selector.js?v=20260728-5"></script>
   <script src="js/openai-client.js?v=20260728-2"></script>
-  <script src="js/ui-renderers.js?v=20260728-4"></script>
-  <script src="js/evaluation-runner.js"></script>
+  <script src="js/ui-renderers.js?v=20260729-1"></script>
+  <script src="js/evaluation-runner.js?v=20260729-1"></script>
   <script src="js/vendor/html2canvas.min.js"></script>
-  <script src="js/app.js?v=20260728-7"></script>
+  <script src="js/app.js?v=20260729-1"></script>
 </body>
 </html>

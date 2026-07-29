@@ -910,11 +910,12 @@
       outline-offset: 2px;
     }
     .global-ai-status {
-      min-height: 44px;
-      padding-inline: 14px;
+      min-height: 50px;
+      padding: 4px 6px 4px 10px;
       flex: 0 0 auto;
       color: var(--color-ash);
       border-color: var(--color-iris-border);
+      border-radius: 18px;
       background: var(--color-iris-shadow);
       font-family: var(--font-gilroy);
       font-size: 12px;
@@ -932,6 +933,50 @@
     .global-ai-status.connected .ai-status-dot {
       background: var(--color-mint-vital);
       box-shadow: 0 0 0 3px rgba(0, 255, 170, 0.13);
+    }
+    .ai-status-content {
+      display: flex;
+      align-items: stretch;
+      gap: 5px;
+    }
+    .ai-model-role {
+      min-width: 150px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 2px;
+      border-radius: 12px;
+      text-align: left;
+    }
+    .ai-model-role.agent {
+      background: rgba(21, 201, 255, 0.11);
+    }
+    .ai-model-role.judge {
+      background: rgba(152, 139, 255, 0.13);
+    }
+    .ai-model-role-label {
+      color: var(--color-clinical-cyan);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+    .ai-model-role.judge .ai-model-role-label {
+      color: var(--color-lilac-mist);
+    }
+    .ai-model-role strong {
+      color: var(--color-cloud-white);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+    .ai-model-divider {
+      width: 1px;
+      margin-block: 5px;
+      background: var(--color-iris-border);
     }
 
     .app-shell {
@@ -1980,6 +2025,19 @@
       border-radius: 10px;
       background: var(--color-deep-iris);
     }
+    .eval-instruction-version {
+      display: flex;
+      align-items: flex-end;
+      flex-direction: column;
+      gap: 7px;
+      flex: 0 0 auto;
+    }
+    .eval-instruction-version small {
+      color: var(--color-ash);
+      font-size: 11px;
+      line-height: 1.35;
+      white-space: nowrap;
+    }
     .eval-component-map {
       margin-top: 18px;
       padding: 16px;
@@ -2432,6 +2490,14 @@
     }
     .site-footer a:hover { color: var(--color-clinical-cyan); text-decoration: underline; }
     .site-footer a:focus-visible { outline-color: rgba(0, 177, 255, 0.5); }
+    .site-footer-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--color-fog);
+      white-space: nowrap;
+    }
+    .site-footer time { color: var(--color-ash); }
 
     body.chat-fullscreen {
       grid-template-rows: minmax(0, 1fr);
@@ -3037,7 +3103,10 @@
       .product-navigation-controls { width: 100%; display: grid; grid-template-columns: 1fr; gap: 8px; }
       .product-tabs { width: 100%; overflow-x: auto; }
       .product-tab { min-width: max-content; flex: 1 0 auto; padding-inline: 10px; font-size: 11px; white-space: nowrap; }
-      .global-ai-status { width: 100%; justify-content: center; }
+      .global-ai-status { width: 100%; justify-content: flex-start; }
+      .ai-status-content { min-width: 0; flex: 1; }
+      .ai-model-role { min-width: 0; flex: 1; }
+      .ai-model-role strong { white-space: normal; }
       .app-shell { width: 100%; height: 100%; min-height: 0; margin: 0; display: block; border: 0; border-radius: 0; }
       .sidebar { display: none; }
       .chat { height: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
@@ -3099,7 +3168,9 @@
       .title-status { justify-content: flex-start; text-align: left; }
       .site-footer { padding: 8px 12px; align-items: flex-start; flex-direction: column; gap: 4px; }
       .site-footer nav { width: 100%; gap: 10px 16px; flex-wrap: wrap; }
-      .site-footer > span { display: none; }
+      .site-footer-status { flex-wrap: wrap; white-space: normal; }
+      .eval-instruction-version { align-items: flex-start; }
+      .eval-instruction-version small { white-space: normal; }
       .information-header { padding: 20px 20px 16px; }
       .information-content { padding: 20px; }
       .information-actions { padding: 14px 20px 18px; }

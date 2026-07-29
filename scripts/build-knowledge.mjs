@@ -49,6 +49,22 @@ function readText(relativePath) {
   return fs.readFileSync(path.join(projectRoot, relativePath), "utf8");
 }
 
+const instructionSourcePaths = [
+  "instructions/core_system_prompt.md",
+  "instructions/immutable_escalation_policy.md",
+  "instructions/runtime_grounding_rules.md",
+  "instructions/recommendation_add_on.md",
+  "instructions/conversation_add_on.md",
+  "instructions/evaluation_judge.md"
+];
+
+function latestModifiedIso(relativePaths) {
+  const latestModified = Math.max(...relativePaths.map(relativePath =>
+    fs.statSync(path.join(projectRoot, relativePath)).mtimeMs
+  ));
+  return new Date(latestModified).toISOString();
+}
+
 const knowledge = {
   generatedFrom: [
     "data/streaming_services.csv",
@@ -64,13 +80,9 @@ const knowledge = {
     "data/eval_cases.csv",
     "data/family_rules.json",
     "policies/family_rules.md",
-    "instructions/core_system_prompt.md",
-    "instructions/immutable_escalation_policy.md",
-    "instructions/runtime_grounding_rules.md",
-    "instructions/recommendation_add_on.md",
-    "instructions/conversation_add_on.md",
-    "instructions/evaluation_judge.md"
+    ...instructionSourcePaths
   ],
+  instructionBundleUpdatedAt: latestModifiedIso(instructionSourcePaths),
   services: readCsv("data/streaming_services.csv"),
   catalog: readCsv("data/streaming_catalog.csv"),
   householdProfile: JSON.parse(readText("data/household_profile.json")),

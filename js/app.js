@@ -918,14 +918,36 @@
     const settings = openAI.readSettings();
     const connected = openAI.selectedModelsConfigured(settings);
     const button = document.getElementById("openAISettings");
+    const status = document.getElementById("aiStatusText");
     button.classList.toggle("connected", connected);
     const roleLabel = model => {
       const info = openAI.modelInfo(model);
       return info ? `${openAI.providerName(info.provider)} ${info.label}` : model;
     };
-    document.getElementById("aiStatusText").textContent = connected
-      ? `Agent ${roleLabel(settings.model)} · Judge ${roleLabel(settings.judgeModel)}`
-      : "Connect AI Models";
+    status.replaceChildren();
+    if (!connected) {
+      status.textContent = "Connect AI Models";
+      return;
+    }
+    const role = (label, value, type) => {
+      const container = document.createElement("span");
+      container.className = `ai-model-role ${type}`;
+      const roleName = document.createElement("span");
+      roleName.className = "ai-model-role-label";
+      roleName.textContent = label;
+      const modelName = document.createElement("strong");
+      modelName.textContent = value;
+      container.append(roleName, modelName);
+      return container;
+    };
+    const divider = document.createElement("span");
+    divider.className = "ai-model-divider";
+    divider.setAttribute("aria-hidden", "true");
+    status.append(
+      role("Main model", roleLabel(settings.model), "agent"),
+      divider,
+      role("Independent judge", roleLabel(settings.judgeModel), "judge")
+    );
   }
 
   function setChatBusy(busy) {

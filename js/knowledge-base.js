@@ -23,6 +23,7 @@
     "instructions/conversation_add_on.md",
     "instructions/evaluation_judge.md"
   ],
+  "instructionBundleUpdatedAt": "2026-07-29T01:44:02.000Z",
   "services": [
     {
       "service_id": "SVC-AURORA",

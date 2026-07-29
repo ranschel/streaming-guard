@@ -56,6 +56,21 @@ const agentToolsSource = fs.readFileSync("js/agent-tools.js", "utf8");
 const clientSource = fs.readFileSync("js/openai-client.js", "utf8");
 const stylesheetSource = fs.readFileSync("css/streaming-guard.css", "utf8");
 
+assert(
+  !Number.isNaN(Date.parse(knowledge.instructionBundleUpdatedAt)),
+  "Instruction bundle update timestamp is missing or invalid"
+);
+assert(indexMarkup.includes('class="site-footer-status"'), "Site footer update status is missing");
+assert(indexMarkup.includes('class="ai-status-content"'), "Separated AI model status container is missing");
+assert(applicationSource.includes('role("Main model"'), "Main model status block is missing");
+assert(applicationSource.includes('role("Independent judge"'), "Independent judge status block is missing");
+assert(stylesheet.includes(".ai-model-role.agent"), "Main model visual treatment is missing");
+assert(stylesheet.includes(".ai-model-role.judge"), "Judge model visual treatment is missing");
+assert(
+  /Last updated <time datetime="[^"]+">[^<]+<\/time>/.test(indexMarkup),
+  "Site footer last-updated timestamp is missing"
+);
+
 const contextSelectionState = context.createSeedState("SG-005");
 const contextSelectionDecisionPacket = engine.buildDecisionPacket(contextSelectionState);
 const focusedContext = contextSelector.select({
@@ -1584,6 +1599,8 @@ async function runSuite(
     `${label}: per-case run action was not placed in the case header`
   );
   assert(evaluationMarkup.includes('class="eval-instructions-drawer"'), `${label}: instructions drawer was not rendered`);
+  assert(evaluationMarkup.includes("Instructions updated"), `${label}: instruction update time was not rendered`);
+  assert(evaluationMarkup.includes("f52e28c6"), `${label}: current instruction hash changed unexpectedly`);
   assert.equal(
     (evaluationMarkup.match(/data-eval-action="open-instruction-fullscreen"/g) || []).length,
     6,
