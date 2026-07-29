@@ -61,6 +61,10 @@ assert(
   "Instruction bundle update timestamp is missing or invalid"
 );
 assert(indexMarkup.includes('class="site-footer-status"'), "Site footer update status is missing");
+assert(
+  indexMarkup.includes('src="js/knowledge-base.js?v=20260729-2"'),
+  "Knowledge bundle cache version is missing"
+);
 assert(indexMarkup.includes('class="ai-status-content"'), "Separated AI model status container is missing");
 assert(applicationSource.includes('role("Main model"'), "Main model status block is missing");
 assert(applicationSource.includes('role("Independent judge"'), "Independent judge status block is missing");
