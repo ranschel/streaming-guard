@@ -2859,12 +2859,31 @@
     }
 
     @media (max-width: 1120px) {
-      .app-shell { grid-template-columns: 250px 1fr; }
-      .details { display: none; }
+      .app-shell,
+      .app-shell.details-open { grid-template-columns: 250px minmax(0, 1fr); }
+      .details,
+      .app-shell.details-open .details { display: none; }
       .details-toggle { display: none; }
     }
 
     @media (max-width: 900px) {
+      .product-tab { min-height: 44px; }
+      .spending-page .dialog-body {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow-x: hidden;
+      }
+      .spending-dashboard,
+      .spending-dashboard > *,
+      .spending-summary-card,
+      .spending-kpis,
+      .household-spending,
+      .spending-chart-wrap {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+      }
       .evaluations-page .dialog-body { overflow: hidden; }
       .eval-command-bar {
         align-items: stretch;
@@ -2891,6 +2910,100 @@
       .eval-case-nav-item {
         flex: 0 0 190px;
       }
+    }
+
+    @media (max-width: 900px) and (max-height: 500px) {
+      .product-navigation { padding: 8px 14px; gap: 10px; }
+      .product-navigation-brand span { display: none; }
+      .product-navigation-controls { min-width: 0; flex: 1 1 auto; }
+      .product-tabs { min-width: 0; overflow-x: auto; }
+      .global-ai-status { flex: 0 0 auto; }
+      .app-shell,
+      .app-shell.details-open {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        border: 0;
+        border-radius: 0;
+      }
+      .sidebar,
+      .details,
+      .app-shell.details-open .details { display: none; }
+      .chat {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        height: 100%;
+        margin: 0;
+        grid-template-columns: minmax(0, 1fr);
+        border-radius: 0;
+      }
+      .chat > *,
+      .whatsapp-appbar,
+      .chat-header,
+      .messages,
+      .composer-wrap {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+      }
+      .prototype-badge,
+      .status-pill { display: none; }
+      .whatsapp-appbar { min-height: 44px; padding: 0 10px; gap: 8px; }
+      .whatsapp-brand { min-width: 0; flex: 1 1 auto; }
+      .whatsapp-appbar-actions { min-width: 0; flex: 0 0 auto; gap: 5px; }
+      .chat-restart-button,
+      .chat-download-button,
+      .chat-fullscreen-toggle {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+        padding: 0;
+        justify-content: center;
+      }
+      .chat-restart-button strong,
+      .chat-download-button strong,
+      .chat-fullscreen-toggle strong { display: none; }
+      .chat-header { min-height: 54px; padding: 8px 14px; }
+      .messages { padding: 12px 14px 18px; overflow-x: hidden; }
+      .composer-wrap { padding: 8px 12px 10px; }
+      .composer { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; }
+      .composer textarea { width: 100%; min-width: 0; }
+      .send-button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+      .composer-hint { display: none; }
+      .choice-button,
+      .context-update-button,
+      .context-dismiss-button { min-height: 44px; }
+      .ai-settings-actions .text-button { min-height: 44px; padding: 8px; }
+      .information-close { width: 44px; height: 44px; }
+      .eval-toolbar-actions > button,
+      .eval-more-menu > summary,
+      .eval-more-menu button,
+      .eval-case-run,
+      .eval-drawer-close,
+      .eval-prompt-fullscreen-button,
+      .eval-approval-gate button,
+      .eval-workflow .eval-approval-gate button { min-height: 44px; }
+      .eval-drawer-close { width: 44px; height: 44px; padding: 0; }
+      .eval-case-definition > summary,
+      .eval-manual-review > summary,
+      .eval-checks > summary,
+      .eval-output summary { min-height: 44px; display: flex; align-items: center; }
+      .eval-approval-gate label { min-height: 44px; align-items: center; }
+      .eval-approval-gate input { width: 20px; height: 20px; margin-top: 0; flex: 0 0 auto; }
+      .site-footer { padding: 4px 12px; }
+      .site-footer a {
+        min-width: 44px;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .site-footer > span { display: none; }
     }
 
     @media (max-width: 760px) {
@@ -2974,6 +3087,9 @@
       .composer textarea { width: 100%; min-width: 0; }
       .send-button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
       .composer-mode { align-items: flex-start; flex-direction: column; }
+      .choice-button { min-height: 44px; padding-block: 10px; }
+      .ai-settings-actions .text-button { min-height: 44px; padding: 8px; }
+      .information-close { width: 44px; height: 44px; }
       .dialog-header { align-items: stretch; flex-direction: column; gap: 14px; }
       .context-header-actions { align-items: stretch; flex-direction: column; }
       .context-update-button, .context-dismiss-button { width: 100%; }
@@ -2985,7 +3101,17 @@
       .eval-run-heading button, .eval-approval-gate button, .eval-case-run { width: 100%; }
       .eval-case-grid { grid-template-columns: 1fr; }
       .eval-manual-grid { grid-template-columns: 1fr; }
-      .eval-toolbar-actions > button { flex: 0 0 auto; }
+      .eval-toolbar-actions > button { min-height: 44px; flex: 0 0 auto; }
+      .eval-more-menu > summary,
+      .eval-more-menu button,
+      .eval-case-run,
+      .eval-drawer-close,
+      .eval-prompt-fullscreen-button,
+      .eval-approval-gate button,
+      .eval-workflow .eval-approval-gate button { min-height: 44px; }
+      .eval-drawer-close { width: 44px; height: 44px; padding: 0; }
+      .eval-approval-gate label { min-height: 44px; align-items: center; }
+      .eval-approval-gate input { width: 20px; height: 20px; margin-top: 0; flex: 0 0 auto; }
       .eval-instructions-drawer { width: 100%; }
       .eval-prompt-card summary { padding-right: 190px; }
       .eval-prompt-fullscreen-button { right: 52px; }
