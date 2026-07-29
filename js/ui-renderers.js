@@ -343,30 +343,36 @@
     const stageIndex = {
       not_started: 0,
       trigger: 1,
-      model_request: 2,
-      recommendation_ready: 2,
-      family_discussion: 3,
-      final_agreement: 4,
+      model_request: 3,
+      recommendation_ready: 4,
+      family_discussion: 5,
+      final_agreement: 5,
       external_action: 5,
       completion_confirmed: 6
     };
-    const currentIndex = stageIndex[state.review.progressStage] ?? (state.review.started ? 1 : 0);
+    const currentIndex = state.review.discussionStatus === "resolved"
+      ? 6
+      : stageIndex[state.review.progressStage] ?? (state.review.started ? 1 : 0);
     const householdRequest = state.scenario.triggerType === "household_request";
+    const humanDetail = state.review.progressStage === "completion_confirmed"
+      ? "Adult confirmed the external action; household details were updated"
+      : state.review.progressStage === "external_action"
+        ? `Adult completes the ${language.noun} outside Streaming Guard and confirms it`
+        : "Adult agrees, disagrees, asks questions, or adds information";
     const steps = [
       householdRequest
-        ? ["New subscription request", "Riley’s requested title and current household coverage reviewed"]
-        : ["Daily background sweep", "Household context and confirmed viewing reviewed"],
-      ["Recommendation ready", "Evidence, financial impact and next step presented"],
-      ["Family discussion", "Questions, disagreement or new information considered"],
-      ["Final agreement", "Adult agrees with the final recommendation"],
-      ["External action", `Adult completes the ${language.noun} outside Streaming Guard`],
-      ["Completion confirmed", "Household details update only after confirmation"]
+        ? ["Input", "New subscription request", "The adult’s request starts the review"]
+        : ["Input", "Daily background sweep", "The household-triggered sweep starts the review"],
+      ["Context", "Grounded household evidence", "Relevant data, policies, and calculations are assembled"],
+      ["Decision", "Agent evaluates the options", "The selected model determines the best-supported recommendation"],
+      ["Output", "Structured recommendation", "Evidence, financial impact, and the next step are presented in chat"],
+      ["Human", "Adult review and action", humanDetail]
     ];
     const items = steps.slice(0, currentIndex).map((step, index) => {
       const oneBased = index + 1;
       const stateClass = oneBased < currentIndex ? "complete" : oneBased === currentIndex ? "current" : "";
       const symbol = oneBased < currentIndex ? "✓" : String(oneBased);
-      return `<li class="progress-step ${stateClass}"><span class="progress-dot">${symbol}</span><strong>${step[0]}</strong><small>${escapeHtml(step[1])}</small></li>`;
+      return `<li class="progress-step ${stateClass}"><span class="progress-dot">${symbol}</span><span class="progress-phase">${escapeHtml(step[0])}</span><strong>${escapeHtml(step[1])}</strong><small>${escapeHtml(step[2])}</small></li>`;
     }).join("");
     const progress = items ? `<ol class="progress-list">${items}</ol>` : "";
     const resolution = state.review.discussionStatus === "resolved" ? resolutionMarkup(state) : "";
@@ -410,7 +416,7 @@
     }).join("");
     const inputSummary = Array.isArray(activity.inputSummary) && activity.inputSummary.length
       ? `<details class="api-input-summary"${["preparing", "waiting"].includes(activity.status) ? " open" : ""}>
-          <summary>Sent input summary</summary>
+          <summary>Context</summary>
           <ul>${activity.inputSummary.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
         </details>`
       : "";
@@ -429,6 +435,50 @@
       ${activity.error ? `<p class="api-error">${escapeHtml(activity.error)}</p>` : ""}
       <div class="api-activity-meta">${elapsed ? `<span>${escapeHtml(elapsed)}</span>` : ""}${usage}${response}</div>
       <p class="api-security-note">API keys and full prompt contents are never displayed here.</p>
+    </section>`;
+  }
+
+  function contextPolicyTraceMarkup(activity = {}, state = {}) {
+    const trace = activity.trace;
+    if (!trace) {
+      if (!state.review?.manualScenario) return "";
+      return `<section class="context-trace-card context-trace-empty" aria-label="Context and policy trace">
+        <div class="context-trace-heading">
+          <div><small>Context and policy trace</small><strong>Waiting for your first message</strong></div>
+        </div>
+        <p>Each manual-chat interaction will show the relevant household data, policies, simulated tools, validation, and memory result here.</p>
+      </section>`;
+    }
+    const statusLabels = {
+      preparing: "Preparing grounded context",
+      waiting: "Context sent to the model",
+      received: "Context use validated",
+      error: "Interaction could not be completed",
+      canceled: "Interaction canceled",
+      not_connected: "Model connection required"
+    };
+    const rows = items => (Array.isArray(items) ? items : []).map(item => `
+      <li><span class="context-trace-check" aria-hidden="true">✓</span><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.detail)}</small></div></li>
+    `).join("");
+    const sections = [
+      ["Relevant data", Array.isArray(trace.sources) ? trace.sources : []],
+      ["Instructions and policies", Array.isArray(trace.policies) ? trace.policies : []],
+      ["Simulated tools", Array.isArray(trace.tools) ? trace.tools : []]
+    ].map(([label, items], index) => `
+      <details class="context-trace-group"${index === 0 ? " open" : ""}>
+        <summary>${escapeHtml(label)} <span>${items.length}</span></summary>
+        <ul>${rows(items)}</ul>
+      </details>
+    `).join("");
+    return `<section class="context-trace-card ${escapeHtml(activity.status || "preparing")}" aria-label="Context and policy trace">
+      <div class="context-trace-heading">
+        <span class="context-trace-live-dot" aria-hidden="true"></span>
+        <div><small>Context and policy trace</small><strong>${escapeHtml(statusLabels[activity.status] || "Context prepared")}</strong></div>
+        <span class="context-trace-count">${Array.isArray(trace.sources) ? trace.sources.length : 0} sources</span>
+      </div>
+      ${sections}
+      <div class="context-trace-outcome"><span>Validation</span><strong>${escapeHtml(trace.validationOutcome || "No validation result is available yet.")}</strong></div>
+      <div class="context-trace-outcome"><span>Memory</span><strong>${escapeHtml(trace.memoryOutcome || "No memory result is available yet.")}</strong></div>
     </section>`;
   }
 
@@ -989,6 +1039,7 @@
     detailMarkup,
     progressMarkup,
     llmActivityMarkup,
+    contextPolicyTraceMarkup,
     memoryMarkup,
     spendingMarkup,
     evaluationMarkup

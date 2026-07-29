@@ -6,8 +6,8 @@
 
 **10 of 10 cases passed.**
 
-- **Prompt hash:** `4a31838f`
-- **Run completed:** July 28, 2026
+- **Prompt hash:** `f52e28c6`
+- **Run completed:** July 28, 2026 at 7:05 PM PDT
 - **Agent model:** `gpt-5.6-terra`
 - **Independent judge model:** `gpt-5.6-luna`
 - **Passed:** 10
@@ -66,4 +66,4 @@ The evaluation cycle produced documented improvements to:
 - schedule future subscriptions one day before release without ever recommending a start date in the past; and
 - distinguish a selected pause’s calendar duration, maximum permitted duration, avoided billing cycles, and required return date.
 
-The final current run confirms these changes without regression across the ten-case set. All model-driven cases passed structured validation, expected status and action checks, semantic-rubric assessment, and human-control assessment. Every judge result reported an empty `gaps` array.
+The final current run was completed after the context-selection and live-trace refinements and confirms that those changes introduced no regression across the ten-case set. All model-driven cases passed structured validation, expected status and action checks, semantic-rubric assessment, and human-control assessment. Every judge result reported an empty `gaps` array.

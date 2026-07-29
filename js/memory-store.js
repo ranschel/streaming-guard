@@ -135,14 +135,14 @@
         recommendationSavingsEvents: Array.isArray(candidate.recommendationSavingsEvents) ? candidate.recommendationSavingsEvents : seed.recommendationSavingsEvents,
         subscriptionChangeLog: Array.isArray(candidate.subscriptionChangeLog) ? candidate.subscriptionChangeLog : seed.subscriptionChangeLog,
         messages: Array.isArray(candidate.messages)
-          ? candidate.messages.map(message => typeof message?.text === "string"
+          ? candidate.messages
+            .filter(message => !/^Manual (?:scenario mode|chat) is ready\./i.test(message?.text || ""))
+            .map(message => typeof message?.text === "string"
             ? {
                 ...message,
                 text: containsSensitiveAccountInformation(message.text)
                   ? SENSITIVE_MESSAGE_PLACEHOLDER
-                  : /^Manual scenario mode is ready\./i.test(message.text)
-                    ? "Manual chat is ready. Ask any household streaming-subscription planning, management, viewing-access, or spending question, or tell me what changed. I can save explicit updates to subscriptions, plans, renewal details, viewing, watchlists, budgets, preferences, and family rules. If a required detail is missing, I’ll ask before saving anything."
-                    : message.text.replace(
+                  : message.text.replace(
                         /\s+For example, you can ask me to subscribe to [^.]+ now\.$/i,
                         ""
                       ),

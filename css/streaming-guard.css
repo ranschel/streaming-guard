@@ -186,6 +186,7 @@
     .whatsapp-appbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
     .chat-restart-button,
     .chat-download-button,
+    .chat-log-button,
     .chat-fullscreen-toggle {
       min-height: 32px;
       padding: 5px 10px;
@@ -200,15 +201,19 @@
     }
     .chat-restart-button:hover,
     .chat-download-button:hover,
+    .chat-log-button:hover,
     .chat-fullscreen-toggle:hover,
     .chat-fullscreen-toggle[aria-pressed="true"] { background: rgba(0, 0, 0, 0.22); }
     .chat-restart-button span,
     .chat-download-button span,
+    .chat-log-button span,
     .chat-fullscreen-toggle span { font-size: 15px; line-height: 1; opacity: 1; }
     .chat-restart-button strong,
     .chat-download-button strong,
+    .chat-log-button strong,
     .chat-fullscreen-toggle strong { font-size: 11px; font-weight: 700; white-space: nowrap; }
     .chat-download-button:disabled { cursor: wait; opacity: 0.68; }
+    .chat-log-button:disabled { cursor: not-allowed; opacity: 0.48; }
 
     .chat-export-surface {
       position: absolute;
@@ -486,6 +491,7 @@
     .progress-step.complete .progress-dot { color: white; border-color: #00a884; background: #00a884; }
     .progress-step.current .progress-dot { color: #008069; border-color: #00a884; background: #d9fdd3; box-shadow: 0 0 0 4px rgba(0,168,132,0.11); }
     .progress-step.complete::after { background: #6fcab5; }
+    .progress-phase { display: block; margin-bottom: 2px; color: #008069; font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
     .progress-step strong { display: block; color: #23312e; font-size: 13px; }
     .progress-step small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.35; }
     .progress-step.current strong { color: #008069; }
@@ -1082,6 +1088,7 @@
       box-shadow: 0 0 0 4px rgba(0, 177, 255, 0.14);
     }
     .details .progress-step.current strong { color: var(--color-clinical-cyan); }
+    .details .progress-phase { color: var(--color-clinical-cyan); }
     .details .progress-step { animation: progress-reveal 220ms ease-out; }
     @keyframes progress-reveal {
       from { opacity: 0; transform: translateY(8px); }
@@ -1094,6 +1101,135 @@
       border: 1px solid var(--color-iris-border);
       border-radius: 18px;
       background: var(--color-iris-shadow);
+    }
+    .context-trace-card {
+      margin: 14px 0 18px;
+      padding: 14px;
+      color: var(--color-cloud-white);
+      border: 1px solid var(--color-clinical-cyan);
+      border-radius: 18px;
+      background: var(--color-iris-shadow);
+      box-shadow: 0 0 0 3px rgba(0, 177, 255, 0.05);
+    }
+    .context-trace-heading {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .context-trace-heading div { min-width: 0; flex: 1; }
+    .context-trace-heading small {
+      display: block;
+      color: var(--color-ash);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .context-trace-heading strong {
+      display: block;
+      margin-top: 2px;
+      color: var(--color-clinical-cyan);
+      font-size: 12px;
+    }
+    .context-trace-live-dot {
+      width: 9px;
+      height: 9px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: var(--color-clinical-cyan);
+      box-shadow: 0 0 0 4px rgba(0, 177, 255, 0.13);
+    }
+    .context-trace-card.waiting .context-trace-live-dot { animation: pulse 750ms ease-in-out infinite alternate; }
+    .context-trace-card.received .context-trace-live-dot { background: var(--color-mint-vital); }
+    .context-trace-card.error .context-trace-live-dot,
+    .context-trace-card.not_connected .context-trace-live-dot { background: #ff8493; }
+    .context-trace-count {
+      padding: 4px 7px;
+      flex: 0 0 auto;
+      color: var(--color-mint-vital);
+      border-radius: 999px;
+      background: rgba(68, 255, 190, 0.09);
+      font-size: 8px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .context-trace-group {
+      margin-top: 10px;
+      border-top: 1px solid var(--color-iris-border);
+    }
+    .context-trace-group summary {
+      padding: 9px 0 5px;
+      display: flex;
+      justify-content: space-between;
+      color: var(--color-clinical-cyan);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .context-trace-group summary span {
+      min-width: 20px;
+      text-align: right;
+      color: var(--color-ash);
+    }
+    .context-trace-group ul {
+      margin: 3px 0 0;
+      padding: 0;
+      display: grid;
+      gap: 7px;
+      list-style: none;
+    }
+    .context-trace-group li {
+      display: flex;
+      gap: 7px;
+      min-width: 0;
+    }
+    .context-trace-check {
+      color: var(--color-mint-vital);
+      font-size: 9px;
+      line-height: 1.5;
+    }
+    .context-trace-group li div { min-width: 0; }
+    .context-trace-group li strong,
+    .context-trace-group li small { display: block; overflow-wrap: anywhere; }
+    .context-trace-group li strong {
+      color: var(--color-cloud-white);
+      font: 700 9px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .context-trace-group li small {
+      margin-top: 1px;
+      color: var(--color-ash);
+      font-size: 8px;
+      line-height: 1.35;
+    }
+    .context-trace-outcome {
+      margin-top: 9px;
+      padding: 8px 9px;
+      border-radius: 9px;
+      background: var(--color-deep-iris);
+    }
+    .context-trace-outcome span,
+    .context-trace-outcome strong { display: block; }
+    .context-trace-outcome span {
+      color: var(--color-ash);
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .context-trace-outcome strong {
+      margin-top: 3px;
+      color: var(--color-cloud-white);
+      font-size: 9px;
+      line-height: 1.4;
+    }
+    .context-trace-empty { border-color: var(--color-iris-border); }
+    .context-trace-empty p {
+      margin: 10px 0 0;
+      color: var(--color-ash);
+      font-size: 9px;
+      line-height: 1.5;
     }
     .api-activity-heading {
       display: flex;
@@ -2859,31 +2995,12 @@
     }
 
     @media (max-width: 1120px) {
-      .app-shell,
-      .app-shell.details-open { grid-template-columns: 250px minmax(0, 1fr); }
-      .details,
-      .app-shell.details-open .details { display: none; }
+      .app-shell { grid-template-columns: 250px 1fr; }
+      .details { display: none; }
       .details-toggle { display: none; }
     }
 
     @media (max-width: 900px) {
-      .product-tab { min-height: 44px; }
-      .spending-page .dialog-body {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-        overflow-x: hidden;
-      }
-      .spending-dashboard,
-      .spending-dashboard > *,
-      .spending-summary-card,
-      .spending-kpis,
-      .household-spending,
-      .spending-chart-wrap {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-      }
       .evaluations-page .dialog-body { overflow: hidden; }
       .eval-command-bar {
         align-items: stretch;
@@ -2912,100 +3029,6 @@
       }
     }
 
-    @media (max-width: 900px) and (max-height: 500px) {
-      .product-navigation { padding: 8px 14px; gap: 10px; }
-      .product-navigation-brand span { display: none; }
-      .product-navigation-controls { min-width: 0; flex: 1 1 auto; }
-      .product-tabs { min-width: 0; overflow-x: auto; }
-      .global-ai-status { flex: 0 0 auto; }
-      .app-shell,
-      .app-shell.details-open {
-        width: 100%;
-        height: 100%;
-        min-height: 0;
-        margin: 0;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        border: 0;
-        border-radius: 0;
-      }
-      .sidebar,
-      .details,
-      .app-shell.details-open .details { display: none; }
-      .chat {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-        height: 100%;
-        margin: 0;
-        grid-template-columns: minmax(0, 1fr);
-        border-radius: 0;
-      }
-      .chat > *,
-      .whatsapp-appbar,
-      .chat-header,
-      .messages,
-      .composer-wrap {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-      }
-      .prototype-badge,
-      .status-pill { display: none; }
-      .whatsapp-appbar { min-height: 44px; padding: 0 10px; gap: 8px; }
-      .whatsapp-brand { min-width: 0; flex: 1 1 auto; }
-      .whatsapp-appbar-actions { min-width: 0; flex: 0 0 auto; gap: 5px; }
-      .chat-restart-button,
-      .chat-download-button,
-      .chat-fullscreen-toggle {
-        width: 44px;
-        min-width: 44px;
-        height: 44px;
-        min-height: 44px;
-        padding: 0;
-        justify-content: center;
-      }
-      .chat-restart-button strong,
-      .chat-download-button strong,
-      .chat-fullscreen-toggle strong { display: none; }
-      .chat-header { min-height: 54px; padding: 8px 14px; }
-      .messages { padding: 12px 14px 18px; overflow-x: hidden; }
-      .composer-wrap { padding: 8px 12px 10px; }
-      .composer { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; }
-      .composer textarea { width: 100%; min-width: 0; }
-      .send-button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
-      .composer-hint { display: none; }
-      .choice-button,
-      .context-update-button,
-      .context-dismiss-button { min-height: 44px; }
-      .ai-settings-actions .text-button { min-height: 44px; padding: 8px; }
-      .information-close { width: 44px; height: 44px; }
-      .eval-toolbar-actions > button,
-      .eval-more-menu > summary,
-      .eval-more-menu button,
-      .eval-case-run,
-      .eval-drawer-close,
-      .eval-prompt-fullscreen-button,
-      .eval-approval-gate button,
-      .eval-workflow .eval-approval-gate button { min-height: 44px; }
-      .eval-drawer-close { width: 44px; height: 44px; padding: 0; }
-      .eval-case-definition > summary,
-      .eval-manual-review > summary,
-      .eval-checks > summary,
-      .eval-output summary { min-height: 44px; display: flex; align-items: center; }
-      .eval-approval-gate label { min-height: 44px; align-items: center; }
-      .eval-approval-gate input { width: 20px; height: 20px; margin-top: 0; flex: 0 0 auto; }
-      .site-footer { padding: 4px 12px; }
-      .site-footer a {
-        min-width: 44px;
-        min-height: 44px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .site-footer > span { display: none; }
-    }
-
     @media (max-width: 760px) {
       .eval-workflow { grid-template-columns: minmax(0, 1fr); }
       .product-navigation { padding: 9px 12px 10px; align-items: stretch; flex-direction: column; gap: 8px; }
@@ -3013,64 +3036,26 @@
       .product-navigation-brand span { display: none; }
       .product-navigation-controls { width: 100%; display: grid; grid-template-columns: 1fr; gap: 8px; }
       .product-tabs { width: 100%; overflow-x: auto; }
-      .product-tab { min-width: max-content; min-height: 44px; flex: 1 0 auto; padding-inline: 10px; font-size: 11px; white-space: nowrap; }
+      .product-tab { min-width: max-content; flex: 1 0 auto; padding-inline: 10px; font-size: 11px; white-space: nowrap; }
       .global-ai-status { width: 100%; justify-content: center; }
       .app-shell { width: 100%; height: 100%; min-height: 0; margin: 0; display: block; border: 0; border-radius: 0; }
       .sidebar { display: none; }
-      .chat {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-        height: 100%;
-        margin: 0;
-        grid-template-columns: minmax(0, 1fr);
-        border: 0;
-        border-radius: 0;
-        box-shadow: none;
-      }
-      .chat > *,
-      .whatsapp-appbar,
-      .chat-header,
-      .messages,
-      .composer-wrap {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-      }
-      .whatsapp-appbar { min-height: 44px; padding: 0 10px; gap: 8px; }
-      .whatsapp-brand { min-width: 0; flex: 1 1 auto; }
-      .whatsapp-brand strong { white-space: nowrap; }
+      .chat { height: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+      .whatsapp-appbar { min-height: 44px; }
       .prototype-badge { display: none; }
       .chat-header { min-height: 68px; padding: 12px 16px; }
       .status-pill { display: none; }
-      .whatsapp-appbar-actions { min-width: 0; flex: 0 0 auto; gap: 5px; }
+      .whatsapp-appbar-actions { gap: 5px; }
       .chat-restart-button,
       .chat-download-button,
-      .chat-fullscreen-toggle {
-        width: 44px;
-        min-width: 44px;
-        height: 44px;
-        min-height: 44px;
-        padding: 0;
-        justify-content: center;
-      }
-      .chat-restart-button strong,
-      .chat-download-button strong,
-      .chat-fullscreen-toggle strong { display: none; }
-      .messages { padding: 18px 14px 28px; overflow-x: hidden; }
-      .messages > * { max-width: 100%; }
+      .chat-log-button,
+      .chat-fullscreen-toggle { padding-inline: 8px; }
+      .messages { padding: 18px 14px 28px; }
       .message.user {
         max-width: 85%;
         margin-right: 0;
       }
-      .welcome-stack { width: 100%; max-width: 100%; min-width: 0; margin: 14px auto; }
-      .welcome-stack .welcome-card,
-      .demo-trigger-grid,
-      .welcome-card .demo-trigger-card { min-width: 0; max-width: 100%; }
-      .welcome-card h1,
-      .welcome-card p,
-      .welcome-card .demo-trigger-card strong,
-      .welcome-card .demo-trigger-card span { overflow-wrap: anywhere; }
+      .welcome-stack { margin: 14px auto; }
       .welcome-card { padding: 26px 20px; }
       .scenario-picker-card { padding: 20px; }
       .demo-trigger-grid { grid-template-columns: 1fr; }
@@ -3083,13 +3068,7 @@
       .rec-label { padding-bottom: 3px; background: transparent; }
       .rec-value { padding-top: 3px; border-left: 0; }
       .composer-wrap { padding: 10px 12px 14px; }
-      .composer { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; }
-      .composer textarea { width: 100%; min-width: 0; }
-      .send-button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
       .composer-mode { align-items: flex-start; flex-direction: column; }
-      .choice-button { min-height: 44px; padding-block: 10px; }
-      .ai-settings-actions .text-button { min-height: 44px; padding: 8px; }
-      .information-close { width: 44px; height: 44px; }
       .dialog-header { align-items: stretch; flex-direction: column; gap: 14px; }
       .context-header-actions { align-items: stretch; flex-direction: column; }
       .context-update-button, .context-dismiss-button { width: 100%; }
@@ -3101,17 +3080,7 @@
       .eval-run-heading button, .eval-approval-gate button, .eval-case-run { width: 100%; }
       .eval-case-grid { grid-template-columns: 1fr; }
       .eval-manual-grid { grid-template-columns: 1fr; }
-      .eval-toolbar-actions > button { min-height: 44px; flex: 0 0 auto; }
-      .eval-more-menu > summary,
-      .eval-more-menu button,
-      .eval-case-run,
-      .eval-drawer-close,
-      .eval-prompt-fullscreen-button,
-      .eval-approval-gate button,
-      .eval-workflow .eval-approval-gate button { min-height: 44px; }
-      .eval-drawer-close { width: 44px; height: 44px; padding: 0; }
-      .eval-approval-gate label { min-height: 44px; align-items: center; }
-      .eval-approval-gate input { width: 20px; height: 20px; margin-top: 0; flex: 0 0 auto; }
+      .eval-toolbar-actions > button { flex: 0 0 auto; }
       .eval-instructions-drawer { width: 100%; }
       .eval-prompt-card summary { padding-right: 190px; }
       .eval-prompt-fullscreen-button { right: 52px; }
@@ -3120,23 +3089,6 @@
       .context-overview-heading { align-items: flex-start; flex-direction: column; }
       .context-metrics { grid-template-columns: 1fr; }
       .household-summary { grid-template-columns: 1fr; }
-      .spending-page .dialog-body {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-        overflow-x: hidden;
-      }
-      .spending-dashboard,
-      .spending-dashboard > *,
-      .spending-summary-card,
-      .spending-kpis,
-      .household-spending,
-      .spending-chart-wrap {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-      }
-      .spending-kpis { grid-template-columns: 1fr; }
       .spending-heading { grid-template-columns: 1fr; align-items: start; }
       .spending-budget { max-width: none; text-align: left; }
       .spending-chart { min-width: 620px; }
@@ -3147,7 +3099,6 @@
       .title-status { justify-content: flex-start; text-align: left; }
       .site-footer { padding: 8px 12px; align-items: flex-start; flex-direction: column; gap: 4px; }
       .site-footer nav { width: 100%; gap: 10px 16px; flex-wrap: wrap; }
-      .site-footer a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
       .site-footer > span { display: none; }
       .information-header { padding: 20px 20px 16px; }
       .information-content { padding: 20px; }

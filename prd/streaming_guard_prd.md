@@ -103,7 +103,7 @@ To maintain operational integrity, the agent only engages with queries and tasks
 
 #### Observe
 
-The agent reads the current date; the household’s fictional prototype profile, watchlists, manually reported viewing status, priorities, preferences, active subscriptions, prices, billing dates, monthly budget, and family content rules; and the relevant conversation context. It also reads fictional service-plan and catalog records covering releases, availability changes, migrations, promotions, bundles, pause limits, cancellation terms, and account URLs.
+The agent reads the current date; the household’s fictional prototype profile, watchlists, manually reported viewing status, priorities, preferences, active subscriptions, prices, billing dates, monthly budget, and family content rules; and the relevant conversation context. It also reads fictional service-plan and catalog records covering releases, availability changes, migrations, promotions, bundles, pause limits, cancellation terms, and account URLs. Before calling the LLM, deterministic context-selection code analyzes the current trigger or adult message, recent conversation, active recommendation, and recognized services, plans, titles, and household members. It follows the relationships among those entities to select the relevant subscription, watchlist, viewing, catalog, service-term, financial, and policy records. Broad portfolio questions intentionally receive broader household context, while narrow questions receive a smaller relevant packet.
 
 #### Reason
 
@@ -115,7 +115,7 @@ When one action is clearly supported, the agent produces a structured subscripti
 
 #### Check
 
-Before returning the result, the prototype verifies that required information is present, current, and internally consistent; validates structured output and deterministic date and financial calculations; grounds title, price, availability, billing, service-term, and household claims in the supplied records; applies child-rating and family rules; and validates any included URL against streaming_services.csv. If URL validation fails, the link is omitted and the adult is told that no verified link is available. If a viewing request would exceed the household budget, the agent explains the amount and asks the adult whether to reprioritize, choose a cheaper option, or explicitly change the budget. A recommendation-driven subscription record does not change until the adult explicitly confirms completing the required external action. Through free-text chat, independently completed subscription or plan changes may also be validated and saved as explicit new household information.
+Before returning the result, the prototype verifies that required information is present, current, and internally consistent; validates structured output and deterministic date and financial calculations; grounds title, price, availability, billing, service-term, and household claims in the supplied records; applies child-rating and family rules; and validates any included URL against streaming_services.csv. If URL validation fails, the link is omitted and the adult is told that no verified link is available. If a viewing request would exceed the household budget, the agent explains the amount and asks the adult whether to reprioritize, choose a cheaper option, or explicitly change the budget. A recommendation-driven subscription record does not change until the adult explicitly confirms completing the required external action. Through free-text chat, independently completed subscription or plan changes may also be validated and saved as explicit new household information. The prototype also verifies that the selected context contains the entities and records needed for the detected request. It does not allow context selection to determine the recommendation; the selected LLM still makes the final recommendation.
 
 ### 4. Inputs and context
 
@@ -126,6 +126,7 @@ Before returning the result, the prototype verifies that required information is
 - **system_date [dynamic injected parameter]:** The current browser calendar date supplied when the prototype runs. Scenario renewal, viewing, availability, and release dates are rebased relative to this date where applicable.
 - **trigger_context [dynamic parameter]:** Identifies whether the interaction began through Run daily background sweep, Review a new subscription request, or Enter a manual scenario. It includes the applicable scenario, title, target service, and the adult’s latest chat request.
 - **context_freshness [dynamic context]:** Records when the household profile, family rules, subscriptions, watchlist, and viewing information were last confirmed so the agent can detect potentially stale information.
+- **selected_context [dynamic context]:** A request-specific context packet assembled before each LLM call. The selector resolves the interaction’s intent, named entities, active scenario, recent conversation, and relationships among services, plans, titles, viewers, subscriptions, watchlists, viewing records, rules, and calculations. Broad questions, such as asking which subscriptions the household has or what it should subscribe to next, expand the selection to the relevant portfolio-level records.
 - **Recent conversation and review state [dynamic context]:** Includes the recent chat history, any currently displayed recommendation, the adult’s latest message, pending clarification or external action, and the current recommendation status.
 - **Authorized-adult input [user input]:** The adult may initiate a scenario, agree or disagree with a recommendation, ask questions, provide missing information, correct household context, report completed viewing or subscription changes, change household settings, or confirm completing an external action.
 
@@ -167,7 +168,8 @@ The following files support evaluation and are not treated as evidence for ordin
 
 - **get_service_details [implemented read tool]:** Retrieves fictional service and plan records by service name, service ID, or plan ID. It returns pricing, billing cadence, upfront cost, features, territory, trial and promotion terms, bundle dependencies, pause eligibility and maximum duration, pause-preservation terms, cancellation consequences, and account-management and support URLs from streaming_services.csv.
 - **query_catalog [implemented read tool]:** Queries streaming_catalog.csv by title, service, household territory, or availability date. It returns title metadata, content ratings, release calendars, regional availability, licensing windows, and fictional cross-platform migrations such as TidePlay to ViewFlix.
-- **load_household_context [implemented read tool]:** Loads the current date, household profile, family members, subscriptions, spending history, recommendation savings, watchlists, manually reported viewing information, family rules, current scenario and review state, and the applicable immutable and household policies.
+- **select_context [implemented deterministic context tool]:** Determines the scope and entities relevant to the current trigger or chat message. It resolves named and implied services, plans, titles, viewers, subscription records, watchlist and viewing records, family rules, and recent conversation state. It expands broad inventory or planning requests to portfolio-level context and returns a grounded context packet without choosing the recommendation.
+- **load_household_context [implemented read tool]:** Loads the household and service records selected for the current request, including the applicable profile, members, subscriptions, watchlists, viewing information, spending records, family rules, policies, and current review state.
 - **calculate_plan_financial_impact [implemented deterministic tool]:** Calculates current and proposed monthly spending, monthly-equivalent plan cost, upfront cost, savings or increases over the applicable review period, remaining budget or overage, prepaid-value consequences, and promotion or bundle effects. For a pause, it limits savings to the verified pause period, distinguishes calendar duration from avoided billing cycles, and records that the normal subscription cost returns afterward.
 - **run_daily_sweep [implemented user-triggered workflow tool]:** Evaluates a complete fixed set of signals covering releases, availability and migration changes, approaching renewals, budget conflicts, viewing updates, underuse, family-rule conflicts, missing information, and contradictory information. When material signals exist, it prepares the context for model review without selecting the recommendation in code. When no actionable signal exists, it completes locally without calling an agent or judge model, generating a recommendation, sending a notification, or changing household data. It is not an unattended scheduler; automatic scheduling remains a production fast follow.
 - **update_household_context [implemented controlled write tool]:** Validates and saves explicit information supplied by the authorized adult to the prototype’s local household context. Supported changes include subscription additions, cancellations, pauses, reactivations, plan and price changes, renewal settings and dates, expiration dates, viewing confirmations, watchlist status and priority, budget and household preferences, family rules, household-added escalations, and one-time title-specific child-rating exceptions. The tool records the source and update time and never modifies an external provider account or parental-control system.
@@ -183,6 +185,7 @@ After a subscription or price change is saved, deterministic application code re
 - **Multi-provider model interface [implemented external API interface]:** Sends the same global instructions, applicable task add-on, validated household context, and structured-output contract to the selected OpenAI, Anthropic, or Google model. Recommendation generation and independent evaluation judging can use separately selected models.
 - **Browser-local structured memory [implemented local persistence]:** Stores household changes, conversation state, scenario progress, reminders, evaluation results, and model settings in browser localStorage. It behaves persistently across refreshes on the same browser but is not a production database and does not synchronize across devices.
 - **Evaluation runner [implemented evaluation system]:** Runs the ten fixed cases, uses deterministic schema and grounding checks where applicable, sends completed model outputs to a separately selected semantic judge, preserves human-readable inputs and outputs, and supports stopping, rerunning, rejudging, clearing, and exporting results.
+- **Live context and policy trace [implemented evaluator interface]:** Shows which relevant data sources, instructions and policies, simulated tools, validation steps, and memory outcomes were used during each guided recommendation or free-text interaction. The trace updates as the interaction progresses and distinguishes an unchanged record from an actual saved memory change. It is visible for prototype evaluation and is not part of the adult-facing WhatsApp conversation.
 
 ### 6. Memory decision
 
@@ -419,7 +422,7 @@ Deterministic checks validate structured fields, feasible actions, service ident
 
 **Tests:** Child-safety enforcement, age and rating grounding, adult-only authorization, title- and child-specific exception scope, abstention, and preservation of the permanent household rule.
 
-The final current evaluation run was completed after the PRD and instruction bundle were finalized and approved in the evaluation runner. Nine model-driven cases used `gpt-5.6-terra` for the agent responses and `gpt-5.6-luna` for independent semantic judging; EVAL-07 used the shared deterministic signal detector and intentionally made no model call. Under prompt hash `4a31838f`, all ten cases passed with zero validation failures, zero API errors, zero material judge gaps, and preserved human-control and safety boundaries. The prompt hash, selected models, verdicts, and complete outputs were saved as the final evaluation evidence.
+The final current evaluation run was completed on July 28, 2026, after the context-selection and live context-trace changes. Nine model-driven cases used `gpt-5.6-terra` for the agent responses and `gpt-5.6-luna` for independent semantic judging. EVAL-07 used the shared deterministic signal detector and made no model call. Under prompt hash `f52e28c6`, all ten cases passed with zero validation failures, zero API errors, zero material judge gaps, and preserved human-control and safety boundaries. The prompt hash, selected models, verdicts, and complete outputs were saved as the final evaluation evidence.
 
 ## Develop
 
@@ -430,10 +433,12 @@ The final current evaluation run was completed after the PRD and instruction bun
 Streaming Guard proves one complete advisory subscription-planning loop:
 
 - **Input:** The authorized adult starts a user-triggered background sweep that simulates a daily proactive check, reviews a family request for a new subscription, or enters a manual streaming-subscription question or household update in the WhatsApp-style chat.
-- **Context:** The prototype assembles the household’s current subscriptions, monthly budget, watchlists, confirmed viewing, release and availability dates, service and plan terms, family rules, content-rating limits, and prior confirmed changes from persistent browser storage.
+- **Context:** The prototype uses deterministic intent, entity, and relationship matching to select the relevant subset of household, subscription, title, service, viewing, financial, and policy context for the current interaction.
 - **Decision:** The selected LLM reviews that grounded context and returns a structured recommendation to Subscribe, Keep, Pause, or Cancel; requests adult judgment; refuses unsupported execution; or routes a safety escalation. Deterministic JavaScript independently supplies and validates dates, financial calculations, feasible actions, policy state, and approved service URLs.
 - **Output:** The adult receives a conversational recommendation containing the trigger, confidence, financial impact, viewing rationale, optional grounding evidence, and a clear manual next step. The interface shows scenario progress and current spending throughout the discussion. After the adult confirms completing an external action, it reveals the resulting before-and-after spending, savings or increase, and updated budget utilization.
-- **Human review:** The adult can agree, disagree, ask questions, or add information. Streaming Guard never changes an external account. A household subscription record changes only after the adult completes the action through the provider and confirms it in chat.
+- **Human:** The adult can agree, disagree, ask questions, or add information. Streaming Guard never changes an external account. A household subscription record changes only after the adult completes the action through the provider and confirms it in chat.
+
+The right-side Recommendation stages panel explicitly displays these five stages and reveals each stage as it is reached. The Context and policy trace appears below the stages when context has been prepared.
 
 ### 2. What the user does
 
@@ -447,6 +452,9 @@ The prototype opens on the Chat tab with three starting choices:
 
 After receiving a recommendation, the adult can select I agree, I disagree or have more information, or Ask a question, and can continue naturally in chat.
 If the adult agrees with an action, Streaming Guard provides the service account link and asks for confirmation only after the adult completes the external action. Restart chat returns to the scenario chooser without deleting the model connection. Save full chat exports the complete conversation as one image, and Full screen expands the WhatsApp view.
+During guided scenarios, the right panel shows the five-stage Input → Context → Decision → Output → Human loop and, below it, a live Context and policy trace. The trace identifies the data, policies, simulated tools, validation result, and memory outcome used for the current interaction.
+The WhatsApp header includes Copy AI log, which exports the complete debugging record for the current model interactions, including assembled instructions, selected context, conversation input, raw structured output, and validation information. API keys are excluded.
+The free-text manual scenario does not display recommendation-specific progress or a decision summary before a recommendation exists, but its context, tool, validation, memory, and API activity traces still update for each model interaction.
 The Context and Spending tabs show stored household details and financial history. The Evals tab runs and reviews the ten-case evaluation suite.
 
 ### 3. Demo-safe inputs
@@ -491,7 +499,7 @@ The final evaluation set contains ten cases, more than the original required fiv
 
 *What happened when you tested the agent? Where did it pass, fail, or need a human?*
 
-The final current run used gpt-5.6-terra for the nine model-driven agent responses and gpt-5.6-luna as the independent judge. EVAL-07 used the shared deterministic signal detector and intentionally made no model call. Under prompt hash 4a31838f, all ten cases passed with zero failures, zero API errors, and zero material judge gaps. Every model-driven case passed structured validation, expected status and action checks, semantic-rubric assessment, and human-control assessment.
+The final current evaluation run was completed on July 28, 2026, after the context-selection and live context-trace changes. Nine model-driven cases used gpt-5.6-terra for the agent responses and gpt-5.6-luna for independent semantic judging. EVAL-07 used the shared deterministic signal detector and made no model call. Under prompt hash f52e28c6, all ten cases passed with zero validation failures, zero API errors, zero material judge gaps, and preserved human-control and safety boundaries.
 The cases are listed below in the following format: case number - expected result  - actual result - verdict.
 
 - **EVAL-01 — Cancel underused Aurora+:** Returned a grounded Cancel recommendation, correct $12.99 monthly and $155.88 in projected 12-month savings, manual action, and confirmation gate — **Pass**
@@ -509,7 +517,7 @@ The cases are listed below in the following format: case number - expected resul
 
 *What did you change after testing, and why?*
 
-The prototype improved through repeated instruction review, live-chat testing, deterministic validation, and evaluation reruns. The instruction changes made during development were:
+The prototype improved through repeated instruction review, live-chat testing, deterministic validation, and evaluation reruns. The key instruction, validation, context-selection, memory-safety, and interface changes made during development were:
 
 1. Separated immutable system and escalation rules from household-configurable family rules stored as context.
 1. Added a strict domain boundary limiting the agent to streaming-subscription planning, management, viewing needs, and spending.
@@ -535,15 +543,20 @@ The prototype improved through repeated instruction review, live-chat testing, d
 1. Assigned schema, feasibility, identifiers, approved URLs, grounded dates, and financial amounts to deterministic validation while leaving semantic assessment to the judge.
 1. Refined the judge so it accepts valid paraphrases, does not require literal phrases, and does not contradict properties that already passed deterministic validation.
 1. Added a safety-gated chat-storage workflow: recognizable credentials and payment details are intercepted before model calls; connected-model messages remain transient until classified; sensitive and out-of-scope content is represented only by neutral redaction notices; unclassified raw messages are discarded; and safety-only turns cannot update household context.
+1. Added deterministic intent-, entity-, and relationship-based context selection so each LLM call receives the relevant services, plans, titles, viewers, subscription records, watchlists, viewing records, rules, and calculations rather than an indiscriminate static context bundle.
+1. Added broad-query expansion so portfolio questions receive complete relevant subscription context instead of being treated as narrow title or scenario questions.
+1. Added a live evaluator trace showing the selected context, applicable policies and instructions, simulated tools, validation result, and whether persistent memory remained unchanged or was updated.
+1. Isolated context-trace preparation and rendering from the model-request path so a trace-display failure cannot block the chat or prevent an LLM API call.
+1. Added a complete AI interaction-log export for inspecting the assembled instructions, selected context, conversation input, structured output, and validation result.
 
-The clearest before-and-after improvement concerned evaluation grading. Early responses sometimes failed because JavaScript searched for particular words even when the response communicated the correct meaning. The keyword grader was removed. Exact machine-checkable properties remained in deterministic code, while semantic requirements moved to the independent judge. Later false negatives involving multiple titles, action timing, bundles, pause duration, and child-rating exceptions were resolved by completing the runtime context and making the rubrics principle-based. The final current run under prompt hash `4a31838f` passed all ten cases with zero failures, zero API errors, and zero material judge gaps.
+The clearest before-and-after improvement concerned evaluation grading. Early responses sometimes failed because JavaScript searched for particular words even when the response communicated the correct meaning. The keyword grader was removed. Exact machine-checkable properties remained in deterministic code, while semantic requirements moved to the independent judge. Later false negatives involving multiple titles, action timing, bundles, pause duration, and child-rating exceptions were resolved by completing the runtime context and making the rubrics principle-based. The final current run under prompt hash `f52e28c6` passed all ten cases with zero failures, zero API errors, and zero material judge gaps.
 
 ### 7. What it cannot do yet
 
 *What does the prototype not do yet? Be honest and specific.*
 
 - This is a US-only prototype using fictional household, catalog, provider, pricing, policy, and subscription data.
-- Knowledge, tools, and persistent memory are simulated in browser JavaScript and localStorage. There is no production database, retrieval framework, identity system, audit service, or secure server-side model gateway.
+- Knowledge, tools, context selection, and persistent memory are implemented in browser JavaScript and localStorage. Context selection uses deterministic intent, entity, and relationship matching over bundled fictional records; it is not a production retrieval, vector-search, knowledge-graph, or database framework.
 - The chat resembles WhatsApp but is not connected to WhatsApp, SMS, Messenger, email, or other messaging platforms.
 - The experience is designed for one authorized adult. It does not provide separate family-member chats, identities, permission levels, parental controls, or cross-device household sharing.
 - There are no live provider, catalog, or web-research APIs to discover current titles, prices, release dates, migrations, promotions, or plan terms.
@@ -557,9 +570,77 @@ The clearest before-and-after improvement concerned evaluation grading. Early re
 
 1. The demo begins in a WhatsApp-style conversation where the adult chooses Run daily background sweep.
 2. Streaming Guard assembles the household’s subscriptions, budget, confirmed viewing, watchlist priorities, family rules, Aurora+ renewal terms, and the next Starward Station release. The LLM recommends canceling Aurora+ because the intended viewers finished the only priority title, no other priority title supports the service, and the next relevant season is far away.
-3. The recommendation explains that cancellation reduces monthly spending from $62.95 to $49.96 and saves $155.88 over 12 months. The adult can inspect the grounding evidence, ask questions, disagree or add information, or agree.
-4. Agreement alone changes nothing. The adult opens the fictional Aurora+ account page, completes the cancellation outside Streaming Guard, and confirms it in chat. Only then does the household subscription record change, the progress panel reach completion, and the before-and-after spending and savings appear.
-5. The adult can restart the chat and choose Review a new subscription request. Streaming Guard compares Riley’s requested TidePlay movie with the active ViewFlix plan, sees that the title will move to ViewFlix within the household’s acceptable waiting period, and recommends keeping the current lineup instead of adding $7.99 per month.
-6. A third Enter a manual scenario path demonstrates that the same agent can answer in-scope questions and record adult-confirmed subscription, plan, budget, watchlist, and viewing changes.
-7. The human-control boundary is also visible on screen. When the adult orders Streaming Guard to subscribe to Summit+ directly, the agent presents a structured refusal explaining that it cannot access the provider account, pay, or complete the subscription. It directs the adult to act manually and does not alter the household record.
-8. Finally, the Evals tab shows the completed ten-case evaluation suite covering missing-data abstention, bundle reasoning, no-action restraint, billing and legal escalation, Subscribe, Pause, and child-rating safety. The final current dashboard shows all ten cases passing under prompt hash `4a31838f`, with zero failures, zero API errors, and zero material judge gaps.
+3. The right-side panel visibly moves through Input, Context, Decision, Output, and Human. Its Context and policy trace shows the request-specific data, policies, tools, validation, and memory result used during the interaction.
+4. The recommendation explains that cancellation reduces monthly spending from $62.95 to $49.96 and saves $155.88 over 12 months. The adult can inspect the grounding evidence, ask questions, disagree or add information, or agree.
+5. Agreement alone changes nothing. The adult opens the fictional Aurora+ account page, completes the cancellation outside Streaming Guard, and confirms it in chat. Only then does the household subscription record change, the progress panel reach completion, and the before-and-after spending and savings appear.
+6. The adult can restart the chat and choose Review a new subscription request. Streaming Guard compares Riley’s requested TidePlay movie with the active ViewFlix plan, sees that the title will move to ViewFlix within the household’s acceptable waiting period, and recommends keeping the current lineup instead of adding $7.99 per month.
+7. A third Enter a manual scenario path demonstrates that the same agent can answer in-scope questions and record adult-confirmed subscription, plan, budget, watchlist, and viewing changes.
+8. Each free-text interaction generates a new request-specific context selection and updates the context, tool, validation, memory, and API activity traces.
+9. The human-control boundary is also visible on screen. When the adult orders Streaming Guard to subscribe to Summit+ directly, the agent presents a structured refusal explaining that it cannot access the provider account, pay, or complete the subscription. It directs the adult to act manually and does not alter the household record.
+10. Finally, the Evals tab shows the completed ten-case evaluation suite covering missing-data abstention, bundle reasoning, no-action restraint, billing and legal escalation, Subscribe, Pause, and child-rating safety. The final current dashboard shows all ten cases passing under prompt hash `f52e28c6`, with zero failures, zero API errors, and zero material judge gaps.
+
+## Deploy
+
+### 1. Go / no-go view
+
+**Verdict: Go for a small, supervised pilot using synthetic data; no-go for production use with real household data.**
+
+Streaming Guard passed all ten evaluation cases with zero validation failures, API errors, or material judge gaps. The prototype enforces its central boundary: it can recommend Subscribe, Keep, Pause, or Cancel, but it cannot access accounts, make payments, change subscriptions, or claim an action occurred. The authorized adult remains responsible for every external action.
+
+A limited pilot can proceed because the evaluation evidence, human-control boundary, owners, success thresholds, and rollback process are defined. Production launch remains a no-go until provider calls move behind a secure server, user authentication and production monitoring exist, real data integrations are validated, and a formal privacy and security review is completed.
+
+### 2. Privacy and safety risks
+
+Streaming Guard currently processes fictional household profiles, watchlists, viewing status, subscription records, budget information, family rules, and catalog data. Prototype state and provider API keys are stored only in the user’s browser using localStorage. Keys are not included in the repository or public site files. When the user connects a model, the applicable instructions and household context are sent directly from the browser to the selected model provider.
+
+If comparable real data leaked, it could expose household spending, entertainment preferences, children’s viewing information, family rules, and subscription activity. A compromised browser could also expose a locally stored API key. The prototype therefore must not accept passwords, payment details, authentication codes, or real provider credentials.
+
+This capstone is synthetic end to end; a real pilot would require a formal privacy review first.
+
+### 3. Human operating model
+
+The pilot has three defined roles:
+
+- **Pilot operator:** The participating authorized adult runs checks, reviews recommendations, supplies missing information, and reports confusing or unsupported output.
+- **Escalation owner:** Rotem, as product owner, reviews defects, safety concerns, failed cases, and participant feedback and decides whether testing should pause.
+- **Decision owner:** The authorized adult makes every spending, subscription, budget, and child-content decision and completes any account action outside Streaming Guard.
+
+No external action occurs without adult review. Agreement with a recommendation is not treated as completion. The local household record changes only after the adult acts through the provider and explicitly confirms completion. Once per week, the product owner reviews pilot feedback, sampled recommendations, safety incidents, and the evaluation dashboard before deciding whether the pilot continues unchanged, continues with corrections, or pauses.
+
+### 4. Quality monitoring
+
+Monitoring covers three metric families:
+
+- **Quality:** At least 90% of sampled recommendations must be judged correct and grounded. Execution-refusal, missing-information, and child-safety cases must maintain a 100% pass rate.
+- **Value:** At least 80% of recommendations should be understandable in under 60 seconds, at least 70% should be rated useful, and participating households should voluntarily use the product at least twice per week.
+- **Risk:** There must be zero external actions performed by the agent, zero unconfirmed household-record changes, zero exposed API keys, and zero violations of child-rating or immutable safety rules.
+
+A quality result below 90% triggers review and correction before expansion. Any risk violation immediately pauses the pilot. The complete evaluation suite will run monthly and after every model, instruction, policy, calculation, or material data-contract change.
+
+### 5. User feedback plan
+
+Streaming Guard will collect feedback through three channels:
+
+1. The adult’s Agree, Disagree, Ask a question, and Add information interactions will show where recommendations were useful, rejected, or required clarification.
+2. Participants will answer two weekly questions: “Which recommendation was most or least useful, and why?” and “Was anything confusing, unsupported, or difficult to act on?”
+3. Each week, the product owner will manually review a sample of pilot cases and rerun representative scenarios against the fixed evaluation suite.
+
+Rotem will classify each issue as a product defect, unclear explanation, missing context, model-quality problem, or safety concern. Safety issues trigger an immediate pause; other recurring issues are prioritized for the next revision and retested before release.
+
+### 6. Pilot plan
+
+The proposed pilot will include five authorized adults from five households for three weeks, with each household reviewing approximately two streaming-planning cases per week. This should produce about 30 observed decisions while keeping the pilot small and reversible.
+
+Included cases are Subscribe, Keep, Pause, Cancel, missing-information clarification, no-action restraint, and refusal of external execution. Excluded cases are real passwords or payment information, automated account actions, real child profiles, legal or refund advice, unattended scheduling, and use as provider customer support.
+
+The pilot succeeds if at least 90% of reviewed recommendations are correct and grounded; all safety and human-control cases pass; at least 80% of recommendations are understood within 60 seconds; at least four of five participants say they would continue using the product; and no API keys, sensitive information, or unconfirmed actions are stored or exposed.
+
+If a hard boundary fails, the pilot pauses immediately. Participants return to their normal manual subscription process while the product owner reviews the affected output and evaluation evidence. Testing resumes only after the defect is corrected, all ten evaluation cases pass again, and the pilot restarts with two households before returning to the full group.
+
+### 7. Video outline
+
+- **0:00–0:30 — Introduction:** Introduce Streaming Guard as an agent that helps households reduce avoidable streaming spending while protecting access to priority titles.
+- **0:30–1:30 — Problem and discovery:** Explain subscription fatigue, missed release changes, forgotten renewals, and household preference conflicts. Explain why changing context makes an agent more appropriate than a static recommendation tool.
+- **1:30–2:30 — Live demonstration:** Show a grounded happy-path recommendation with its financial effect and adult decision point. Then ask the agent to complete a subscription action and show its refusal, manual-action direction, and unchanged household record.
+- **2:30–3:30 — Evidence:** Show the 10/10 evaluation result. Explain how testing improved grounding, bundle reasoning, pause timing, multi-title recommendations, and semantic evaluation. State one honest limitation: the browser prototype uses fictional data and local storage and is not ready for real household data.
+- **3:30–4:00 — Launch plan:** Present the five-household, three-week supervised pilot, success thresholds, safety boundaries, and rollback plan. End with the live Streaming Guard URL visible on screen.

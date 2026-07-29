@@ -1,6 +1,11 @@
 (function initializeOpenAIClient(global) {
   "use strict";
 
+  const contextSelector = global.StreamingGuardContextSelector;
+  if (!contextSelector) {
+    throw new Error("Streaming Guard context selector failed to load.");
+  }
+
   // Retained so provider settings saved before the product rename continue to
   // work without forcing the user to reconnect.
   const SETTINGS_KEY = "subscriptionGuard.openai.v1";
@@ -383,6 +388,16 @@
       input,
       textConfig
     });
+    const debugRequest = {
+      provider,
+      providerName: providerName(provider),
+      model: selectedModel,
+      endpoint: request.url,
+      systemInstructions: instructions,
+      input,
+      structuredOutputConfig: textConfig,
+      rawRequestBody: request.body
+    };
     let response;
     try {
       response = await global.fetch(request.url, {
@@ -397,25 +412,47 @@
         error.code = "aborted";
         error.cause = cause;
         error.provider = provider;
+        error.debug = { request: debugRequest, response: null };
         throw error;
       }
       const error = new Error(`The browser could not reach ${providerName(provider)}. Check the connection and try again.`);
       error.cause = cause;
       error.provider = provider;
+      error.debug = { request: debugRequest, response: null };
       throw error;
     }
 
     const body = await response.json().catch(() => ({}));
+    const debugResponse = {
+      httpStatus: response.status,
+      ok: response.ok,
+      rawResponseBody: body
+    };
     if (!response.ok) {
       const error = new Error(body.error?.message || `${providerName(provider)} returned status ${response.status}.`);
       error.status = response.status;
       error.provider = provider;
+      error.debug = { request: debugRequest, response: debugResponse };
       throw error;
     }
 
     const result = providerResult({ provider, body, selectedModel });
-    if (!result.text) throw new Error(`${providerName(provider)} returned an empty response.`);
-    return result;
+    if (!result.text) {
+      const error = new Error(`${providerName(provider)} returned an empty response.`);
+      error.provider = provider;
+      error.debug = { request: debugRequest, response: debugResponse };
+      throw error;
+    }
+    return {
+      ...result,
+      debug: {
+        request: debugRequest,
+        response: {
+          ...debugResponse,
+          extractedText: result.text
+        }
+      }
+    };
   }
 
   function recommendationSchema() {
@@ -1109,14 +1146,23 @@
     decisionPacket,
     knowledge,
     reason = "initial_subscription_check",
+    contextSelection = null,
     model = null,
     signal
   }) {
     const instructions = recommendationInstructions(knowledge);
+    const selectedContext = contextSelection || contextSelector.select({
+      state,
+      knowledge,
+      decisionPacket,
+      userText: "",
+      requestType: "recommendation",
+      reason
+    });
     const input = [
       `Recommendation reason: ${reason}`,
-      "Validated household context, feasible actions, and calculations (no recommendation has been preselected):",
-      JSON.stringify(publicHouseholdContext(state, decisionPacket), null, 2),
+      "Deterministically selected household context, feasible actions, and calculations (no recommendation has been preselected):",
+      JSON.stringify(selectedContext.householdContext, null, 2),
       "\nRecent conversation:",
       recentConversation(state.messages) || "No previous text messages."
     ].join("\n");
@@ -1141,11 +1187,13 @@
     } catch (cause) {
       const error = new Error(`${result.providerName} returned a recommendation that could not be parsed.`);
       error.cause = cause;
+      error.debug = result.debug;
       throw error;
     }
     try {
       return {
         ...result,
+        contextSelection: selectedContext,
         recommendation: validateRecommendation(parsed, decisionPacket, state)
       };
     } catch (error) {
@@ -1154,6 +1202,7 @@
       error.provider = result.provider;
       error.responseId = result.responseId;
       error.usage = result.usage;
+      error.debug = result.debug;
       throw error;
     }
   }
@@ -1166,10 +1215,20 @@
     knowledge,
     model = null,
     validationFeedback = "",
+    contextSelection = null,
     signal
   }) {
     const instructions = conversationInstructions(knowledge);
-    const servicePlanCatalog = knowledge.services.map(plan => ({
+    const decisionPacket = global.StreamingGuardRecommendationEngine.buildDecisionPacket(state);
+    const selectedContext = contextSelection || contextSelector.select({
+      state,
+      knowledge,
+      decisionPacket,
+      recommendation,
+      userText,
+      requestType: "conversation"
+    });
+    const servicePlanCatalog = selectedContext.servicePlans.map(plan => ({
       serviceId: plan.service_id,
       serviceName: plan.service_name,
       planId: plan.plan_id,
@@ -1182,7 +1241,7 @@
       pauseEligible: plan.pause_eligible === "true",
       maxPauseDays: Number(plan.max_pause_days || 0)
     }));
-    const titleCatalog = knowledge.catalog.map(title => ({
+    const titleCatalog = selectedContext.catalogTitles.map(title => ({
       titleId: title.title_id,
       titleName: title.title_name,
       contentType: title.content_type,
@@ -1194,15 +1253,11 @@
     }));
     const input = [
       `Conversation mode: ${intent}`,
-      "Current household context and displayed recommendation:",
-      JSON.stringify(publicHouseholdContext(
-        state,
-        global.StreamingGuardRecommendationEngine.buildDecisionPacket(state),
-        recommendation
-      ), null, 2),
-      "\nAvailable fictional service plans:",
+      "Deterministically selected household context and displayed recommendation:",
+      JSON.stringify(selectedContext.householdContext, null, 2),
+      "\nSelected fictional service plans:",
       JSON.stringify(servicePlanCatalog, null, 2),
-      "\nAvailable fictional title catalog:",
+      "\nSelected fictional title catalog:",
       JSON.stringify(titleCatalog, null, 2),
       "\nRecent conversation:",
       recentConversation(state.messages) || "No previous text messages.",
@@ -1212,7 +1267,6 @@
         ? `\nCorrection required: the previous structured response was rejected because ${validationFeedback} Return a new response that follows the same instructions and corrects that problem.`
         : ""
     ].join("\n");
-    const decisionPacket = global.StreamingGuardRecommendationEngine.buildDecisionPacket(state);
     const result = await requestResponse({
       instructions,
       input,
@@ -1234,11 +1288,13 @@
     } catch (cause) {
       const error = new Error(`${result.providerName} returned a conversational response that could not be parsed.`);
       error.cause = cause;
+      error.debug = result.debug;
       throw error;
     }
     try {
       return {
         ...result,
+        contextSelection: selectedContext,
         response: validateConversationResponse(parsed, recommendation, decisionPacket, state)
       };
     } catch (error) {
@@ -1247,6 +1303,7 @@
       error.provider = result.provider;
       error.responseId = result.responseId;
       error.usage = result.usage;
+      error.debug = result.debug;
       throw error;
     }
   }
@@ -1299,6 +1356,7 @@
     } catch (cause) {
       const error = new Error(`${result.providerName} returned an evaluation judgment that could not be parsed.`);
       error.cause = cause;
+      error.debug = result.debug;
       throw error;
     }
     try {
@@ -1312,6 +1370,7 @@
       error.provider = result.provider;
       error.responseId = result.responseId;
       error.usage = result.usage;
+      error.debug = result.debug;
       throw error;
     }
   }
@@ -1330,6 +1389,7 @@
     isModelConfigured,
     selectedModelsConfigured,
     missingSelectedProviders,
+    selectRequestContext: contextSelector.select,
     createRecommendation,
     createResponse,
     createEvaluationJudgment,

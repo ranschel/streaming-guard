@@ -1,0 +1,13 @@
+.progress-phase {
+  display: block;
+  margin-bottom: 2px;
+  color: #008069;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.details .progress-phase {
+  color: var(--color-clinical-cyan);
+}

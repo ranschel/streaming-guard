@@ -9,8 +9,9 @@
   const toolFactory = global.StreamingGuardAgentTools;
   const openAI = global.StreamingGuardOpenAI;
   const evaluationFactory = global.StreamingGuardEvaluations;
+  const contextSelector = global.StreamingGuardContextSelector;
 
-  if (![context, math, engine, ui, memoryFactory, toolFactory, openAI, evaluationFactory].every(Boolean)) {
+  if (![context, math, engine, ui, memoryFactory, toolFactory, openAI, evaluationFactory, contextSelector].every(Boolean)) {
     throw new Error("Streaming Guard application dependencies failed to load.");
   }
 
@@ -64,10 +65,12 @@
   const chatFullscreenToggle = document.getElementById("chatFullscreenToggle");
   const restartChatButton = document.getElementById("restartChat");
   const downloadFullChatButton = document.getElementById("downloadFullChat");
+  const copyAIChatLogButton = document.getElementById("copyAIChatLog");
   let responseController = null;
   let chatSequenceVersion = 0;
   let apiActivityTimer = null;
   let liveApiActivity = { status: "idle" };
+  let aiChatDebugLog = [];
   let selectedEvaluationId = "EVAL-01";
   let evaluationInstructionsOpen = false;
   let fullScreenEvaluationInstruction = null;
@@ -280,6 +283,65 @@
     if (!copied) throw new Error("The browser could not copy the evaluation output.");
   }
 
+  function refreshAIChatLogButton() {
+    copyAIChatLogButton.disabled = aiChatDebugLog.length === 0;
+    copyAIChatLogButton.title = aiChatDebugLog.length
+      ? `${aiChatDebugLog.length} raw AI call${aiChatDebugLog.length === 1 ? "" : "s"} available`
+      : "Run an AI recommendation or chat interaction first";
+  }
+
+  function recordAIChatDebugCall({
+    requestType,
+    attempt = 1,
+    result = null,
+    error = null,
+    validatedOutput = null,
+    validationStatus = "accepted"
+  }) {
+    const debug = result?.debug || error?.debug;
+    if (!debug) return;
+    aiChatDebugLog.push({
+      sequence: aiChatDebugLog.length + 1,
+      recordedAt: new Date().toISOString(),
+      requestType,
+      attempt,
+      validation: {
+        status: validationStatus,
+        error: error?.message || null
+      },
+      request: debug.request,
+      response: debug.response,
+      validatedApplicationOutput: validatedOutput
+    });
+    if (error) error.aiChatDebugLogged = true;
+    refreshAIChatLogButton();
+  }
+
+  function exportAIChatDebugLog() {
+    return JSON.stringify({
+      product: "Streaming Guard",
+      exportType: "Complete chat AI request and response log",
+      exportedAt: new Date().toISOString(),
+      security: "API keys and authorization headers are excluded. This export contains complete model instructions, selected household context, retained chat history, user input, schemas, and raw model responses.",
+      currentScenario: {
+        id: state.scenario?.id || null,
+        evalCase: state.scenario?.evalCase || null,
+        scenarioType: state.scenario?.scenarioType || null,
+        systemDate: state.systemDate
+      },
+      calls: aiChatDebugLog
+    }, null, 2);
+  }
+
+  async function copyAIChatDebugLog() {
+    if (!aiChatDebugLog.length) {
+      showToast("No AI calls have been made in this chat yet");
+      return;
+    }
+    await copyText(exportAIChatDebugLog());
+    showToast(`Copied ${aiChatDebugLog.length} complete AI call${aiChatDebugLog.length === 1 ? "" : "s"}`);
+  }
+
   function transact(mutator) {
     memory.transact(mutator);
     refreshState();
@@ -406,8 +468,52 @@
 
   function renderApiActivity() {
     const activityElement = document.getElementById("llmActivity");
+    const traceElement = document.getElementById("contextPolicyTrace");
     if (!activityElement) return;
+    const reconciledTrace = reconcileTraceWithSavedState(liveApiActivity.trace);
+    if (reconciledTrace !== liveApiActivity.trace) {
+      liveApiActivity = { ...liveApiActivity, trace: reconciledTrace };
+    }
     activityElement.innerHTML = ui.llmActivityMarkup(liveApiActivity);
+    if (traceElement) {
+      try {
+        traceElement.innerHTML = ui.contextPolicyTraceMarkup(liveApiActivity, state);
+      } catch (_) {
+        traceElement.innerHTML = `<section class="context-trace-card context-trace-empty" aria-label="Context and policy trace"><div class="context-trace-heading"><div><small>Context and policy trace</small><strong>Trace unavailable</strong></div></div><p>The evaluator trace could not be displayed. The chat and model request continue normally.</p></section>`;
+      }
+    }
+  }
+
+  function reconcileTraceWithSavedState(trace) {
+    if (!trace || !state.review?.externalActionConfirmed) return trace;
+    const serviceId = state.scenario?.targetServiceId;
+    const subscription = state.subscriptions.find(item => item.serviceId === serviceId);
+    if (!subscription) return trace;
+    const update = {
+      updateType: "external_action_confirmation",
+      targetId: serviceId,
+      relatedId: "",
+      field: "subscriptionStatus",
+      value: subscription.status,
+      effectiveDate: state.review.resolvedAt || state.systemDate
+    };
+    const description = describeMemoryUpdate(update);
+    const expectedMemoryOutcome = `Saved ${description}.`;
+    const expectedValidationOutcome = "The explicit adult external-action confirmation was validated and saved locally.";
+    const existingTool = (trace.tools || []).find(tool => tool.name === "update_household_context");
+    if (
+      trace.memoryOutcome === expectedMemoryOutcome &&
+      trace.validationOutcome === expectedValidationOutcome &&
+      existingTool?.detail === `Saved ${description}`
+    ) {
+      return trace;
+    }
+    return {
+      ...trace,
+      tools: appendTraceTool(trace.tools, "update_household_context", `Saved ${description}`),
+      memoryOutcome: expectedMemoryOutcome,
+      validationOutcome: expectedValidationOutcome
+    };
   }
 
   function stopApiActivityTimer() {
@@ -423,7 +529,221 @@
     renderApiActivity();
   }
 
-  function beginApiActivity({ requestType, settings, inputSummary }) {
+  function appendTraceTool(sourceTools, name, detail) {
+    const traceTools = Array.isArray(sourceTools) ? [...sourceTools] : [];
+    const existingIndex = traceTools.findIndex(tool => tool.name === name);
+    const nextTool = { name, detail };
+    if (existingIndex >= 0) {
+      traceTools[existingIndex] = nextTool;
+    } else {
+      traceTools.push(nextTool);
+    }
+    return traceTools;
+  }
+
+  function recordLiveTraceTool(name, detail) {
+    const currentTrace = liveApiActivity.trace;
+    if (!currentTrace) return;
+    updateApiActivity({
+      trace: {
+        ...currentTrace,
+        tools: appendTraceTool(currentTrace.tools, name, detail)
+      }
+    });
+  }
+
+  function memoryMemberName(memberId) {
+    const member = state.members.find(candidate => candidate.id === memberId);
+    return member?.firstName || member?.name || memberId || "the household member";
+  }
+
+  function memoryTitleName(titleId) {
+    return state.watchlist.find(item => item.titleId === titleId)?.title
+      || context.knowledge.catalog.find(item => item.title_id === titleId)?.title_name
+      || titleId
+      || "the title";
+  }
+
+  function memoryServiceName(serviceId) {
+    return state.subscriptions.find(subscription => subscription.serviceId === serviceId)?.service
+      || context.knowledge.services.find(plan => plan.service_id === serviceId)?.service_name
+      || serviceId
+      || "the service";
+  }
+
+  function displayMemoryValue(field, value) {
+    if (field === "monthlyBudgetCap" || field === "monthlyCost") {
+      return engine.formatMoney(state, Number(value));
+    }
+    if (["nextRenewal", "expirationDate"].includes(field) && /^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
+      return engine.displayDate(value, state.household.locale);
+    }
+    return String(value || "").replaceAll("_", " ");
+  }
+
+  function describeMemoryUpdate(update) {
+    if (!update) return "a household detail";
+    const member = memoryMemberName(update.targetId);
+    const titleId = update.relatedId || (update.updateType === "title_rating_exception" ? update.value : "");
+    const title = memoryTitleName(titleId);
+    const serviceId = update.updateType === "external_action_confirmation"
+      ? state.scenario.targetServiceId
+      : update.targetId;
+    const service = memoryServiceName(serviceId);
+    const displayedValue = displayMemoryValue(update.field, update.value);
+
+    if (update.updateType === "viewing_confirmation") {
+      const date = update.effectiveDate
+        ? ` on ${engine.displayDate(update.effectiveDate, state.household.locale)}`
+        : "";
+      return `${member}’s viewing status for ${title} as ${displayedValue}${date}`;
+    }
+    if (update.updateType === "family_rule") {
+      const ruleNames = {
+        monthlyBudgetCap: "monthly streaming budget",
+        advertisingTolerance: "advertising preference",
+        resolutionPreference: "video-resolution preference",
+        priorityPolicy: "watchlist-priority policy"
+      };
+      return `the household ${ruleNames[update.field] || update.field} as ${displayedValue}`;
+    }
+    if (update.updateType === "subscription_record") {
+      const subscription = state.subscriptions.find(item => item.serviceId === update.targetId);
+      const fieldNames = {
+        subscriptionPlan: "plan",
+        subscriptionStatus: "status",
+        monthlyCost: "monthly cost",
+        renewalStatus: "renewal setting",
+        nextRenewal: "next renewal",
+        expirationDate: "expiration date"
+      };
+      const savedValue = update.field === "subscriptionPlan"
+        ? subscription?.plan || displayedValue
+        : update.field === "subscriptionStatus"
+          ? subscription?.status || displayedValue
+          : displayedValue;
+      return `${service} ${fieldNames[update.field] || update.field} as ${savedValue}`;
+    }
+    if (update.updateType === "watchlist_item") {
+      return `${member}’s ${update.field === "priority" ? "priority" : "watchlist status"} for ${title} as ${displayedValue}`;
+    }
+    if (update.updateType === "title_rating_exception") {
+      return `a one-title rating exception for ${member} to view ${title}`;
+    }
+    if (update.updateType === "additional_escalation") {
+      return `the additional household escalation “${update.value}”`;
+    }
+    if (update.updateType === "remove_additional_escalation") {
+      return `removal of the household escalation “${update.value}”`;
+    }
+    if (update.updateType === "external_action_confirmation") {
+      const savedStatus = state.subscriptions.find(item => item.serviceId === serviceId)?.status;
+      return `${service} as ${String(savedStatus || "updated").replaceAll("_", " ")} after the adult’s external-action confirmation`;
+    }
+    return `${update.updateType.replaceAll("_", " ")}: ${displayedValue}`;
+  }
+
+  function completedMemoryOutcome({ turn, updateResult, recommendation }) {
+    if (turn && ["sensitive_information_warning", "out_of_scope"].includes(turn.safetyDisposition)) {
+      return turn.safetyDisposition === "out_of_scope"
+        ? "Out-of-scope content excluded from persistent household context."
+        : "Sensitive content redacted; household context unchanged.";
+    }
+    if (updateResult?.applied?.length) {
+      const descriptions = updateResult.applied.map(describeMemoryUpdate);
+      return `Saved ${descriptions.length === 1 ? descriptions[0] : `${descriptions.length} changes: ${descriptions.join("; ")}`}.`;
+    }
+    if (updateResult?.pending?.length) {
+      return `No memory change yet. Waiting for adult confirmation before saving ${updateResult.pending.map(describeMemoryUpdate).join("; ")}.`;
+    }
+    if (updateResult?.rejected?.length) {
+      return `No memory change. Validation rejected ${updateResult.rejected.map(item => describeMemoryUpdate(item.update)).join("; ")}.`;
+    }
+    if (recommendation) {
+      return "Recommendation saved; household subscription records remain unchanged until the adult confirms any external action.";
+    }
+    return "No persistent household change was requested in this interaction.";
+  }
+
+  function updateTraceForLocalMemoryChange(update, validationOutcome) {
+    const currentTrace = liveApiActivity.trace;
+    if (!currentTrace || !update) return;
+    const description = describeMemoryUpdate(update);
+    updateApiActivity({
+      trace: {
+        ...currentTrace,
+        tools: appendTraceTool(
+          currentTrace.tools,
+          "update_household_context",
+          `Saved ${description}`
+        ),
+        memoryOutcome: `Saved ${description}.`,
+        validationOutcome
+      }
+    });
+  }
+
+  function updateCompletedTrace({ turn = null, updateResult = null, recommendation = false } = {}) {
+    const currentTrace = liveApiActivity.trace;
+    if (!currentTrace) return;
+    let traceTools = appendTraceTool(
+      currentTrace.tools,
+      "validate_structured_response",
+      "The model response passed the structured contract and grounding checks"
+    );
+    const responsePayload = recommendation ? currentRecommendation() : turn;
+    if (/https?:\/\//i.test(JSON.stringify(responsePayload || {}))) {
+      traceTools = appendTraceTool(
+        traceTools,
+        "validate_output_url",
+        "The included service URL matched the stored approved service record"
+      );
+    }
+    if (updateResult?.applied?.length) {
+      traceTools = appendTraceTool(
+        traceTools,
+        "update_household_context",
+        `Saved ${updateResult.applied.map(describeMemoryUpdate).join("; ")}`
+      );
+    } else if (updateResult?.rejected?.length) {
+      traceTools = appendTraceTool(
+        traceTools,
+        "validate_context_update",
+        "The requested memory change failed validation and was not written"
+      );
+    }
+    updateApiActivity({
+      trace: {
+        ...currentTrace,
+        tools: traceTools,
+        memoryOutcome: completedMemoryOutcome({ turn, updateResult, recommendation }),
+        validationOutcome: "Structured response received, grounded, and validated."
+      }
+    });
+  }
+
+  function selectedContextInputSummary(contextSelection, instructionSummary, schemaSummary) {
+    const householdContext = contextSelection?.householdContext || {};
+    const selection = householdContext.context_selection || {};
+    const members = householdContext.family_members || [];
+    const subscriptions = householdContext.current_subscriptions || [];
+    const titles = contextSelection?.catalogTitles || [];
+    const scope = String(contextSelection?.scope || "unknown").replaceAll("_", " ");
+    return [
+      instructionSummary,
+      `Selection scope: ${scope}`,
+      `Members sent: ${members.map(member => member.firstName || member.name || member.id).join(", ") || "none"}`,
+      `Subscription records sent: ${subscriptions.map(subscription => subscription.service || subscription.serviceId).join(", ") || "none"}`,
+      `Catalog titles sent: ${titles.map(title => title.title_name || title.title_id).join(", ") || "none"}`,
+      `${Math.min(10, (state.messages || []).filter(message => message.text).length)} recent retained chat messages sent`,
+      selection.ambiguities?.length
+        ? `Unresolved context ambiguity sent for clarification: ${selection.ambiguities.map(item => item.message).join(" ")}`
+        : "No unresolved context ambiguity",
+      schemaSummary
+    ];
+  }
+
+  function beginApiActivity({ requestType, settings, inputSummary, contextSelection = null }) {
     stopApiActivityTimer();
     const modelInfo = openAI.modelInfo(settings.model);
     liveApiActivity = {
@@ -432,6 +752,7 @@
       provider: openAI.providerName(modelInfo?.provider || openAI.providerForModel(settings.model)),
       model: modelInfo?.label || settings.model,
       inputSummary,
+      trace: contextSelection?.trace || null,
       startedAt: Date.now(),
       elapsedMs: 0,
       responseId: null,
@@ -827,18 +1148,25 @@
   async function askOpenAI(text, intent) {
     const settings = openAI.readSettings();
     let adultMessagePersisted = false;
+    let conversationAttempt = 1;
+    const decisionPacket = engine.buildDecisionPacket(state);
+    const contextSelection = openAI.selectRequestContext({
+      state,
+      knowledge: context.knowledge,
+      decisionPacket,
+      recommendation: currentRecommendation(),
+      userText: text,
+      requestType: "conversation"
+    });
     beginApiActivity({
       requestType: "conversation",
       settings,
-      inputSummary: [
+      contextSelection,
+      inputSummary: selectedContextInputSummary(
+        contextSelection,
         "Global system instructions and the conversation task add-on",
-        state.review.manualScenario
-          ? "Stored household context with no preselected recommendation"
-          : "Current structured recommendation and household context",
-        `Recent WhatsApp conversation including the adult’s ${intent === "general" ? "message" : intent}`,
-        "Available context-update and financial-calculation tool contracts",
         "Strict structured conversation response schema"
-      ]
+      )
     });
     responseController?.abort();
     responseController = new AbortController();
@@ -851,6 +1179,7 @@
           intent,
           knowledge: context.knowledge,
           validationFeedback,
+          contextSelection,
           signal: responseController.signal
         });
       let responsePromise = requestConversationResponse("");
@@ -860,16 +1189,30 @@
         result = await responsePromise;
       } catch (firstError) {
         if (!firstError.output || firstError.name === "AbortError") throw firstError;
+        recordAIChatDebugCall({
+          requestType: "conversation",
+          attempt: conversationAttempt,
+          error: firstError,
+          validatedOutput: firstError.output,
+          validationStatus: "rejected_by_application_validator"
+        });
         updateApiActivity({
           inputSummary: [
             ...liveApiActivity.inputSummary,
             "The first structured response failed validation; one corrected response was requested automatically"
           ]
         });
+        conversationAttempt += 1;
         responsePromise = requestConversationResponse(firstError.message);
         result = await responsePromise;
       }
       const turn = result.response;
+      recordAIChatDebugCall({
+        requestType: "conversation",
+        attempt: conversationAttempt,
+        result,
+        validatedOutput: turn
+      });
       persistAdultMessage(text, turn.safetyDisposition);
       adultMessagePersisted = true;
       completeApiActivity(result);
@@ -885,6 +1228,7 @@
           }
         : applyProposedContextUpdates(turn);
       refreshState();
+      updateCompletedTrace({ turn, updateResult });
       const appliedSubscriptionUpdates = updateResult.applied.filter(update =>
         ["subscription_record", "external_action_confirmation"].includes(update.updateType)
       );
@@ -986,6 +1330,15 @@
         sendChat({ kind: "choices" });
       }
     } catch (error) {
+      if (!error.aiChatDebugLogged) {
+        recordAIChatDebugCall({
+          requestType: "conversation",
+          attempt: conversationAttempt,
+          error,
+          validatedOutput: error.output || null,
+          validationStatus: error.output ? "rejected_by_application_validator" : "request_error"
+        });
+      }
       if (error.name === "AbortError") {
         failApiActivity(error, "canceled");
         return;
@@ -1013,6 +1366,10 @@
 
   function sendChat(message) {
     const storedMessage = tools.send_chat_response(message);
+    recordLiveTraceTool(
+      "send_chat_response",
+      `${storedMessage.role === "user" ? "Adult message stored in the chat" : "Agent response rendered in the chat"}${storedMessage.redacted ? " with safety redaction" : ""}`
+    );
     refreshState();
     return storedMessage;
   }
@@ -1074,16 +1431,24 @@
     refreshState();
     const decisionPacket = engine.buildDecisionPacket(state);
     const settings = openAI.readSettings();
+    const contextSelection = openAI.selectRequestContext({
+      state,
+      knowledge: context.knowledge,
+      decisionPacket,
+      recommendation: null,
+      userText: "",
+      requestType: "recommendation",
+      reason
+    });
     beginApiActivity({
       requestType: "recommendation",
       settings,
-      inputSummary: [
-        "Global system instructions and the recommendation task add-on",
-        `${state.members.length} household members, ${state.subscriptions.length} subscription records, viewing confirmations, watchlist priorities, and family rules`,
-        `Scenario trigger for ${state.scenario.titleName} and ${state.scenario.targetServiceName}`,
-        `Deterministic decision packet with feasible actions, grounded dates, and budget calculations`,
+      contextSelection,
+      inputSummary: selectedContextInputSummary(
+        contextSelection,
+        "Global system instructions, recommendation task add-on, and deterministic decision packet",
         "Strict structured recommendation response schema"
-      ]
+      )
     });
     transact(draft => {
       draft.review.progressStage = "model_request";
@@ -1109,10 +1474,16 @@
         decisionPacket,
         knowledge: context.knowledge,
         reason,
+        contextSelection,
         signal: responseController.signal
       });
       markApiWaiting();
       const result = await responsePromise;
+      recordAIChatDebugCall({
+        requestType: "recommendation",
+        result,
+        validatedOutput: result.recommendation
+      });
       storeRecommendation(result.recommendation, {
         source: "llm",
         model: result.model,
@@ -1120,8 +1491,17 @@
         usage: result.usage
       });
       completeApiActivity(result);
+      updateCompletedTrace({ recommendation: true });
       return { source: "llm", result };
     } catch (error) {
+      if (!error.aiChatDebugLogged) {
+        recordAIChatDebugCall({
+          requestType: "recommendation",
+          error,
+          validatedOutput: error.output || null,
+          validationStatus: error.output ? "rejected_by_application_validator" : "request_error"
+        });
+      }
       if (error.name === "AbortError") {
         failApiActivity(error, "canceled");
         return { source: "aborted", error };
@@ -1294,9 +1674,6 @@
       draft.review.generatedRecommendation = null;
       draft.messages = [];
     });
-    sendChat({
-      text: "Manual chat is ready. Ask any household streaming-subscription planning, management, viewing-access, or spending question, or tell me what changed. I can save explicit updates to subscriptions, plans, renewal details, viewing, watchlists, budgets, preferences, and family rules. If a required detail is missing, I’ll ask before saving anything."
-    });
     renderAll();
     messageInput.focus();
   }
@@ -1452,6 +1829,14 @@
         draft.review.adultDecision = "Added viewing information";
         draft.review.recommendationVersion += 1;
       });
+      updateTraceForLocalMemoryChange({
+        updateType: "viewing_confirmation",
+        targetId: viewer.id,
+        relatedId: state.scenario.titleId,
+        field: "status",
+        value: "watching",
+        effectiveDate: ""
+      }, "The explicit adult viewing update was validated and saved locally.");
       sendChat({ text: `Thanks for clarifying that ${viewer.firstName} is still watching ${state.scenario.titleName}. I’ve updated the household details. The selected agent model will now reconsider the subscription recommendation using that active-viewing fact.` });
       await replaceRecommendationMessages("viewing_still_in_progress");
     } else if (viewer && /(finished today|completed today|done today)/.test(normalized)) {
@@ -1465,6 +1850,14 @@
         draft.review.adultDecision = "Added viewing information";
         draft.review.recommendationVersion += 1;
       });
+      updateTraceForLocalMemoryChange({
+        updateType: "viewing_confirmation",
+        targetId: viewer.id,
+        relatedId: state.scenario.titleId,
+        field: "status",
+        value: "completed",
+        effectiveDate: state.systemDate
+      }, "The explicit adult viewing update was validated and saved locally.");
       sendChat({ text: `Thanks for confirming that ${viewer.firstName} finished ${state.scenario.titleName} today. I’ve saved that update and recalculated the recommendation using the completed viewing information.` });
       await replaceRecommendationMessages("viewing_completion_confirmed");
     } else if (viewer && /(finished|completed|done)/.test(normalized)) {
@@ -1478,6 +1871,14 @@
         source: "adult_chat"
       });
       refreshState();
+      updateTraceForLocalMemoryChange({
+        updateType: "family_rule",
+        targetId: state.household.id || state.household.householdId || "household",
+        relatedId: "",
+        field: "monthlyBudgetCap",
+        value: String(updatedBudget),
+        effectiveDate: state.systemDate
+      }, "The explicit adult budget update was validated and saved locally.");
       sendChat({ text: `Thanks. I updated the household’s monthly streaming budget to ${engine.formatMoney(state, updatedBudget)} and saved today as the latest family-rules confirmation date.` });
       if (state.review.started) {
         transact(draft => {
@@ -1533,6 +1934,14 @@
       source: "adult_chat"
     });
     refreshState();
+    updateTraceForLocalMemoryChange({
+      updateType: "external_action_confirmation",
+      targetId: state.scenario.targetServiceId,
+      relatedId: "",
+      field: "subscriptionStatus",
+      value: completionStatus,
+      effectiveDate: state.systemDate
+    }, "The explicit adult external-action confirmation was validated and saved locally.");
     transact(draft => {
       draft.review.progressStage = "completion_confirmed";
       draft.review.discussionStatus = "resolved";
@@ -1864,6 +2273,8 @@
     resetApiActivity();
     responseController?.abort();
     responseController = null;
+    aiChatDebugLog = [];
+    refreshAIChatLogButton();
     memory.reset();
     evaluations.reset();
     if (removeOpenAIConnection) openAI.clearSettings();
@@ -1881,6 +2292,8 @@
     resetApiActivity();
     responseController?.abort();
     responseController = null;
+    aiChatDebugLog = [];
+    refreshAIChatLogButton();
     memory.reset({
       scenarioId: global.StreamingGuardScenarioConfig.demoScenarios.backgroundSweep
     });
@@ -1993,6 +2406,9 @@
 
   restartChatButton.addEventListener("click", restartChat);
   downloadFullChatButton.addEventListener("click", downloadFullChatImage);
+  copyAIChatLogButton.addEventListener("click", () => {
+    copyAIChatDebugLog().catch(error => showToast(error.message));
+  });
 
   document.getElementById("detailsToggle").addEventListener("click", event => {
     const shell = document.getElementById("appShell");

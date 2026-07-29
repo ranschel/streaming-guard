@@ -33,6 +33,7 @@ for (const file of [
   "js/scenario-config.js",
   "js/household-context.js",
   "js/recommendation-engine.js",
+  "js/context-selector.js",
   "js/openai-client.js",
   "js/memory-store.js",
   "js/agent-tools.js",
@@ -46,6 +47,7 @@ const knowledge = window.StreamingGuardKnowledge;
 const context = window.StreamingGuardContext;
 const engine = window.StreamingGuardRecommendationEngine;
 const client = window.StreamingGuardOpenAI;
+const contextSelector = window.StreamingGuardContextSelector;
 const ui = window.StreamingGuardUI;
 const indexMarkup = fs.readFileSync("index.html", "utf8");
 const stylesheet = fs.readFileSync("css/streaming-guard.css", "utf8");
@@ -53,6 +55,211 @@ const applicationSource = fs.readFileSync("js/app.js", "utf8");
 const agentToolsSource = fs.readFileSync("js/agent-tools.js", "utf8");
 const clientSource = fs.readFileSync("js/openai-client.js", "utf8");
 const stylesheetSource = fs.readFileSync("css/streaming-guard.css", "utf8");
+
+const contextSelectionState = context.createSeedState("SG-005");
+const contextSelectionDecisionPacket = engine.buildDecisionPacket(contextSelectionState);
+const focusedContext = contextSelector.select({
+  state: contextSelectionState,
+  knowledge,
+  decisionPacket: contextSelectionDecisionPacket,
+  userText: "Should Riley subscribe to TidePlay for The Last Mariner?",
+  requestType: "conversation"
+});
+assert.equal(focusedContext.scope, "focused");
+assert.deepEqual(
+  [...focusedContext.householdContext.context_selection.selected_service_ids].sort(),
+  ["SVC-TIDE", "SVC-VIEWFLIX"]
+);
+assert.deepEqual(
+  [...focusedContext.householdContext.context_selection.selected_title_ids],
+  ["TTL-MARINER"]
+);
+assert(focusedContext.householdContext.context_selection.selected_member_ids.includes("MEM-003"));
+assert(focusedContext.catalogTitles.length < knowledge.catalog.length);
+assert(focusedContext.servicePlans.length < knowledge.services.length);
+assert(focusedContext.trace.sources.some(source =>
+  source.name === "streaming_catalog.csv" &&
+  source.detail.includes("The Last Mariner")
+));
+assert(!focusedContext.trace.tools.some(tool => tool.name === "update_household_context"));
+
+const inventoryContextState = context.createSeedState("SG-001");
+const inventoryPhrases = [
+  "What subscriptions do we have?",
+  "Which subscriptions are currently active?",
+  "What are our current subscriptions?",
+  "List our subscriptions.",
+  "What streaming services does the household have?"
+];
+inventoryPhrases.forEach(userText => {
+  const inventoryContext = contextSelector.select({
+    state: inventoryContextState,
+    knowledge,
+    decisionPacket: engine.buildDecisionPacket(inventoryContextState),
+    userText,
+    requestType: "conversation"
+  });
+  assert.equal(inventoryContext.scope, "subscription_inventory");
+  assert.deepEqual(
+    [...inventoryContext.householdContext.context_selection.selected_service_ids].sort(),
+    [...new Set(inventoryContextState.subscriptions.map(subscription => subscription.serviceId))].sort()
+  );
+  assert.equal(
+    inventoryContext.householdContext.current_subscriptions.length,
+    inventoryContextState.subscriptions.length
+  );
+  assert.equal(inventoryContext.householdContext.household_watchlist.length, 0);
+  assert.equal(inventoryContext.householdContext.viewing_information.length, 0);
+  assert.equal(inventoryContext.catalogTitles.length, 0);
+  const subscriptionTrace = inventoryContext.trace.sources.find(source =>
+    source.name === "household_subscriptions.csv"
+  );
+  assert(subscriptionTrace && subscriptionTrace.detail !== "none");
+  assert(!inventoryContext.trace.sources.some(source => source.name === "watchlist.csv"));
+});
+
+const broadContext = contextSelector.select({
+  state: contextSelectionState,
+  knowledge,
+  decisionPacket: contextSelectionDecisionPacket,
+  userText: "What should I subscribe to next?",
+  requestType: "conversation"
+});
+assert.equal(broadContext.scope, "household_wide");
+assert.equal(broadContext.householdContext.family_members.length, contextSelectionState.members.length);
+assert(broadContext.householdContext.household_watchlist.length > 0);
+assert(broadContext.householdContext.candidate_services.length > 1);
+assert(broadContext.catalogTitles.length < knowledge.catalog.length);
+
+const ambiguousChildContext = contextSelector.select({
+  state: contextSelectionState,
+  knowledge,
+  decisionPacket: contextSelectionDecisionPacket,
+  userText: "What should my child watch?",
+  requestType: "conversation"
+});
+assert.equal(ambiguousChildContext.scope, "focused");
+assert.equal(ambiguousChildContext.householdContext.context_selection.ambiguities.length, 1);
+assert.equal(ambiguousChildContext.householdContext.context_selection.ambiguities[0].type, "viewer");
+assert.deepEqual(
+  [...ambiguousChildContext.householdContext.context_selection.selected_member_ids].sort(),
+  ["MEM-003", "MEM-004"]
+);
+
+assert(clientSource.includes("selectedContext.householdContext"));
+assert(clientSource.includes("selectedContext.servicePlans.map"));
+assert(clientSource.includes("selectedContext.catalogTitles.map"));
+assert(!applicationSource.includes("function buildContextPolicyTrace"));
+assert(applicationSource.includes("contextSelection?.trace || null"));
+
+const officialEvalIds = [
+  "EVAL-01", "EVAL-02", "EVAL-03", "EVAL-04", "EVAL-05",
+  "EVAL-06", "EVAL-07", "EVAL-08", "EVAL-09", "EVAL-10"
+];
+const evalContextPackets = new Map();
+for (const evalId of officialEvalIds) {
+  const definition = knowledge.evalCases.find(item => item.eval_id === evalId);
+  assert(definition, `${evalId}: evaluation definition is missing`);
+  if (definition.task_type === "workflow") continue;
+  const scenario = knowledge.agentEvals.find(item => item.case_id === definition.case_id);
+  const evalState = context.createSeedState(definition.case_id);
+  context.rebaseStateDates(evalState, scenario.system_date);
+  evalState.review.started = true;
+  const evalDecisionPacket = engine.buildDecisionPacket(evalState);
+  const packet = contextSelector.select({
+    state: evalState,
+    knowledge,
+    decisionPacket: evalDecisionPacket,
+    recommendation: null,
+    userText: definition.user_input || "",
+    requestType: definition.task_type === "conversation" ? "conversation" : "recommendation",
+    reason: `evaluation_${evalId.toLowerCase()}`
+  });
+  evalContextPackets.set(evalId, { definition, scenario, state: evalState, decisionPacket: evalDecisionPacket, packet });
+  const selection = packet.householdContext.context_selection;
+  assert(selection.selected_service_ids.includes(scenario.primary_service_id), `${evalId}: primary service omitted`);
+  if (scenario.secondary_service_id) {
+    assert(selection.selected_service_ids.includes(scenario.secondary_service_id), `${evalId}: secondary service omitted`);
+  }
+  assert(selection.selected_title_ids.includes(scenario.title_id), `${evalId}: primary title omitted`);
+  assert(packet.servicePlans.some(plan => plan.service_id === scenario.primary_service_id), `${evalId}: service plan omitted`);
+  assert(packet.catalogTitles.some(title => title.title_id === scenario.title_id), `${evalId}: title catalog record omitted`);
+  assert(
+    packet.householdContext.current_subscriptions.some(subscription =>
+      subscription.serviceId === scenario.primary_service_id
+    ),
+    `${evalId}: household subscription record omitted`
+  );
+  assert(packet.householdContext.current_family_rules, `${evalId}: family rules omitted`);
+  assert.equal(selection.ambiguities.length, 0, `${evalId}: selector introduced an unexpected ambiguity`);
+}
+
+const eval01 = evalContextPackets.get("EVAL-01");
+assert.equal(eval01.packet.householdContext.viewing_information.filter(item => item.status === "completed").length, 2);
+assert.equal(eval01.decisionPacket.actionFinancialImpacts.cancel.proposedMonthly, 49.96);
+assert.equal(eval01.decisionPacket.actionFinancialImpacts.cancel.projectedSavings, 155.88);
+
+const eval02 = evalContextPackets.get("EVAL-02");
+assert(eval02.packet.householdContext.viewing_information.some(item =>
+  item.memberId === "MEM-003" && item.status === "unknown"
+));
+assert(eval02.decisionPacket.adultJudgmentGate.reasons.some(reason =>
+  reason.code === "missing_viewing_completion"
+));
+
+const eval03 = evalContextPackets.get("EVAL-03");
+assert.equal(eval03.decisionPacket.target.forfeitedValue, 20);
+assert.equal(eval03.decisionPacket.actionFinancialImpacts.cancel.proposedMonthly, 37.98);
+assert.equal(eval03.decisionPacket.actionFinancialImpacts.cancel.monthlyIncrease, 4.99);
+
+const eval04 = evalContextPackets.get("EVAL-04");
+assert(eval04.packet.householdContext.current_subscriptions.some(subscription =>
+  subscription.serviceId === "SVC-SUMMIT" &&
+  subscription.approvedAccountUrl === "https://www.summitplus.com/"
+));
+
+const eval05 = evalContextPackets.get("EVAL-05");
+assert(eval05.packet.householdContext.current_subscriptions.some(subscription =>
+  subscription.serviceId === "SVC-VIEWFLIX" && subscription.status === "active"
+));
+assert(eval05.packet.catalogTitles.some(title =>
+  title.title_id === "TTL-MARINER" && title.migration_service_id === "SVC-VIEWFLIX"
+));
+
+const eval06 = evalContextPackets.get("EVAL-06");
+assert(eval06.packet.householdContext.current_subscriptions.some(subscription =>
+  subscription.serviceId === "SVC-CIVICLIVE" &&
+  subscription.approvedSupportUrl === "https://www.civiclive.com/support"
+));
+
+const eval08 = evalContextPackets.get("EVAL-08");
+assert(eval08.packet.catalogTitles.some(title => title.title_id === "TTL-ORCHARD"));
+assert(eval08.packet.catalogTitles.some(title => title.title_id === "TTL-FREQUENCY"));
+assert(eval08.packet.householdContext.household_watchlist.some(item =>
+  item.titleId === "TTL-ORCHARD" && item.priority === "high"
+));
+assert(eval08.packet.householdContext.household_watchlist.some(item =>
+  item.titleId === "TTL-FREQUENCY" && item.priority === "high"
+));
+
+const eval09 = evalContextPackets.get("EVAL-09");
+assert(eval09.packet.servicePlans.some(plan =>
+  plan.service_id === "SVC-MEADOW" && Number(plan.max_pause_days) === 60
+));
+assert.equal(eval09.decisionPacket.pauseWindow.eligible, true);
+assert.equal(eval09.decisionPacket.pauseWindow.chosenPauseDays, 57);
+assert.equal(eval09.decisionPacket.actionFinancialImpacts.pause.projectedSavings, 31.98);
+
+const eval10 = evalContextPackets.get("EVAL-10");
+assert(eval10.packet.householdContext.family_members.some(member =>
+  member.id === "MEM-004" && member.firstName === "Casey" && member.age === 9
+));
+assert(eval10.decisionPacket.childSafety.conflicts.some(conflict =>
+  conflict.memberId === "MEM-004" &&
+  conflict.titleId === "TTL-AFTER-DARK" &&
+  conflict.titleRating === "TV-MA" &&
+  conflict.applicableLimit === "TV-G or TV-PG"
+));
 
 assert.equal(
   window.StreamingGuardMemory.containsSensitiveAccountInformation("My password is hunter2"),
@@ -119,6 +326,7 @@ assert(knowledge.evaluationJudge.includes("explicitly excluded from other titles
 assert(knowledge.evaluationJudge.includes("authoritative for the exact property described by that check"));
 assert(knowledge.evaluationJudge.includes("never reject an external URL"));
 assert(knowledge.evaluationJudge.includes("A material fact can satisfy an evidence requirement wherever it appears"));
+assert(knowledge.evaluationJudge.includes("Do not require the same date to be repeated for every item"));
 assert(knowledge.evaluationJudge.includes("Do not require footnotes, formal citations"));
 assert(knowledge.evaluationJudge.includes("Do not require the response to name record categories"));
 assert(knowledge.evaluationJudge.includes("keep, leave, retain, or preserve an existing subscription record"));
@@ -174,6 +382,13 @@ assert(stylesheetSource.includes(".message.user {\n      width: fit-content;"));
 assert(stylesheetSource.includes("margin-right: 8%;"));
 assert(stylesheetSource.includes("max-width: 85%;\n        margin-right: 0;"));
 assert(indexMarkup.includes('id="downloadFullChat"'));
+assert(indexMarkup.includes('id="copyAIChatLog"'));
+assert(applicationSource.includes("function exportAIChatDebugLog"));
+assert(applicationSource.includes("API keys and authorization headers are excluded"));
+assert(applicationSource.includes("recordAIChatDebugCall"));
+assert(clientSource.includes("systemInstructions: instructions"));
+assert(clientSource.includes("rawRequestBody: request.body"));
+assert(clientSource.includes("rawResponseBody: body"));
 assert(indexMarkup.includes('id="monthlyBudgetCard"'));
 assert(indexMarkup.includes('id="decisionSection"'));
 assert(applicationSource.includes("const beforeBudgetPercent = finances.beforeBudget.utilizationPercent"));
@@ -277,21 +492,61 @@ assert(demoWelcomeMarkup.includes('data-action="review-subscription-request"'));
 assert(demoWelcomeMarkup.includes('data-action="start-manual-scenario"'));
 assert(!demoWelcomeMarkup.includes("Summit+"));
 assert(!applicationSource.includes("For example, you can ask me to subscribe"));
-assert(applicationSource.includes("I can save explicit updates to subscriptions, plans, renewal details"));
+assert(!applicationSource.includes("Manual chat is ready"));
+assert(indexMarkup.includes('id="contextPolicyTrace"'));
+assert(
+  indexMarkup.indexOf('id="scenarioProgress"') < indexMarkup.indexOf('id="contextPolicyTrace"'),
+  "The Context and policy trace must appear below the Recommendation progress stages."
+);
 assert(stylesheet.includes(".manual-scenario-button"));
 
 const manualScenarioState = context.createSeedState("SG-001");
 manualScenarioState.review.manualScenario = true;
 assert(window.StreamingGuardUI.detailMarkup(manualScenarioState, null).includes("Manual scenario ready"));
+assert(window.StreamingGuardUI.contextPolicyTraceMarkup(
+  { status: "idle" },
+  manualScenarioState
+).includes("Waiting for your first message"));
+const populatedContextTrace = window.StreamingGuardUI.contextPolicyTraceMarkup({
+  status: "received",
+  trace: {
+    sources: [{ name: "household_subscriptions.csv", detail: "5 active subscriptions" }],
+    policies: [{ name: "core_system_prompt.md", detail: "Adult control" }],
+    tools: [{ name: "load_household_context", detail: "Context loaded" }],
+    validationOutcome: "Structured response received, grounded, and validated.",
+    memoryOutcome: "Household context read; no persistent change."
+  }
+}, manualScenarioState);
+assert(populatedContextTrace.includes("household_subscriptions.csv"));
+assert(populatedContextTrace.includes("core_system_prompt.md"));
+assert(populatedContextTrace.includes("load_household_context"));
+assert(populatedContextTrace.includes("Context use validated"));
+assert(applicationSource.includes("The chat and model request continue normally."));
+assert(applicationSource.includes("function describeMemoryUpdate"));
+assert(applicationSource.includes("function recordLiveTraceTool"));
+assert(applicationSource.includes("function updateTraceForLocalMemoryChange"));
+assert(applicationSource.includes("function reconcileTraceWithSavedState"));
+assert(applicationSource.includes("state.review?.externalActionConfirmed"));
+assert(applicationSource.includes("The explicit adult external-action confirmation was validated and saved locally."));
+assert(applicationSource.includes('"validate_structured_response"'));
+assert(applicationSource.includes('"send_chat_response"'));
+assert(window.StreamingGuardUI.llmActivityMarkup({
+  status: "waiting",
+  inputSummary: ["Household context"]
+}).includes("<summary>Context</summary>"));
 
 const progressiveState = context.createSeedState("SG-001");
 progressiveState.review.started = true;
 progressiveState.review.progressStage = "trigger";
 assert.equal((window.StreamingGuardUI.progressMarkup(progressiveState).match(/class="progress-step/g) || []).length, 1);
 progressiveState.review.progressStage = "model_request";
-assert.equal((window.StreamingGuardUI.progressMarkup(progressiveState).match(/class="progress-step/g) || []).length, 2);
+assert.equal((window.StreamingGuardUI.progressMarkup(progressiveState).match(/class="progress-step/g) || []).length, 3);
 progressiveState.review.progressStage = "external_action";
-assert.equal((window.StreamingGuardUI.progressMarkup(progressiveState).match(/class="progress-step/g) || []).length, 5);
+const completeLoopProgressMarkup = window.StreamingGuardUI.progressMarkup(progressiveState);
+assert.equal((completeLoopProgressMarkup.match(/class="progress-step/g) || []).length, 5);
+["Input", "Context", "Decision", "Output", "Human"].forEach(label => {
+  assert(completeLoopProgressMarkup.includes(`class="progress-phase">${label}</span>`));
+});
 const waitingActivityMarkup = window.StreamingGuardUI.llmActivityMarkup({
   status: "waiting",
   provider: "OpenAI",
@@ -300,7 +555,7 @@ const waitingActivityMarkup = window.StreamingGuardUI.llmActivityMarkup({
   elapsedMs: 1200
 });
 assert(waitingActivityMarkup.includes("Waiting for model response"));
-assert(waitingActivityMarkup.includes("Sent input summary"));
+assert(waitingActivityMarkup.includes("<summary>Context</summary>"));
 assert(waitingActivityMarkup.includes("1.2s elapsed"));
 assert(waitingActivityMarkup.includes("API keys and full prompt contents are never displayed here."));
 
@@ -1874,4 +2129,4 @@ assert(generalChatStore.getState().householdViewingHistory.some(item =>
   item.memberId === "MEM-001" && item.titleId === "TTL-COPPER" && item.status === "completed"
 ));
 
-console.log("Hybrid evaluation regression passed: 40/40 positive fixture runs; the shared signal detector classified the local no-action restraint without a model call; both guided demo triggers, the free-form manual scenario, recommendation-independent subscription and household updates, and scenario switching were verified; child-rating, pause-duration math, and semantic judge controls behaved correctly; rejected structured output remained exportable; legacy saved state migrated.");
+console.log("Hybrid evaluation regression passed: all 10 official eval context packets retained their required services, titles, viewers, records, terms, URLs, rules, and deterministic calculations; 40/40 positive fixture runs passed; the shared signal detector classified the local no-action restraint without a model call; both guided demo triggers, the free-form manual scenario, recommendation-independent subscription and household updates, and scenario switching were verified; child-rating, pause-duration math, and semantic judge controls behaved correctly; rejected structured output remained exportable; legacy saved state migrated.");
