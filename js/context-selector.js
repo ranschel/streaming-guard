@@ -1,6 +1,12 @@
 (function initializeStreamingGuardContextSelector(global) {
   "use strict";
 
+  const schemas = global.StreamingGuardStateSchemas;
+  const traceFactory = global.StreamingGuardTraceManager;
+  if (!schemas || !traceFactory) {
+    throw new Error("Streaming Guard context-plan dependencies failed to load.");
+  }
+
   function normalize(value) {
     return String(value || "")
       .toLowerCase()
@@ -71,6 +77,16 @@
     if (isSubscriptionInventoryRequest(normalizedMessage)) return "subscription_inventory";
     if (isBroadRequest(normalizedMessage)) return "household_wide";
     return "focused";
+  }
+
+  function selectionIntent({ requestType, scope, normalizedMessage, scenarioType }) {
+    if (requestType === "recommendation") {
+      return `recommendation:${scenarioType || "subscription_review"}`;
+    }
+    if (scope === "subscription_inventory") return "subscription_inventory";
+    if (isBroadSubscriptionDiscovery(normalizedMessage)) return "subscription_discovery";
+    if (isSpendingReview(normalizedMessage)) return "spending_review";
+    return "focused_conversation";
   }
 
   function select({
@@ -300,7 +316,7 @@
     const selectedMembers = (state.members || []).filter(member =>
       scope === "household_wide" ||
       selectedMemberIds.has(member.id) ||
-      (!selectedMemberIds.size && member.id === state.household?.authorizedAdultMemberId)
+      member.id === state.household?.authorizedAdultMemberId
     );
     const selectedViewing = subscriptionInventory ? [] : (state.viewing || []).filter(record =>
       (!selectedTitleIds.size || selectedTitleIds.has(record.titleId)) &&
@@ -314,11 +330,139 @@
       (!selectedTitleIds.size || selectedTitleIds.has(record.titleId)) &&
       (!selectedMemberIds.size || selectedMemberIds.has(record.memberId))
     );
-    const selectedCatalog = catalog.filter(record => selectedTitleIds.has(record.title_id));
-    const selectedPlans = (knowledge.services || []).filter(plan => selectedServiceIds.has(plan.service_id));
+    const selectedCatalog = catalog
+      .filter(record => selectedTitleIds.has(record.title_id))
+      .map(record => ({
+        ...record,
+        _provenance: record._provenance || schemas.provenance({
+          source: "streaming_catalog.csv",
+          recordedAt: state.systemDate,
+          verifiedAt: state.systemDate,
+          confidence: "prototype_record"
+        })
+      }));
+    const selectedPlans = (knowledge.services || [])
+      .filter(plan => selectedServiceIds.has(plan.service_id))
+      .map(plan => ({
+        ...plan,
+        _provenance: plan._provenance || schemas.provenance({
+          source: "streaming_services.csv",
+          recordedAt: state.systemDate,
+          verifiedAt: state.systemDate,
+          confidence: "prototype_record"
+        })
+      }));
     const selectedChanges = (state.subscriptionChangeLog || []).filter(change =>
       !change.serviceId || selectedServiceIds.has(change.serviceId)
     );
+
+    const selectedRecordCounts = {
+      household: state.household ? 1 : 0,
+      familyRules: state.familyRules ? 1 : 0,
+      members: selectedMembers.length,
+      subscriptions: selectedSubscriptions.length,
+      viewing: selectedViewing.length,
+      watchlist: selectedWatchlist.length,
+      viewingHistory: selectedHistory.length,
+      catalog: selectedCatalog.length,
+      servicePlans: selectedPlans.length,
+      subscriptionChanges: selectedChanges.length,
+      decisionFacts: decisionPacket ? 1 : 0
+    };
+    const requiredRecordTypes = unique([
+      "household",
+      "familyRules",
+      "authorizedAdult",
+      ...(scope === "subscription_inventory" ? ["subscriptions"] : []),
+      ...(financialRequest ? ["subscriptions", "servicePlans", "budget"] : []),
+      ...(selectedTitleIds.size ? ["catalog", "watchlist", "viewing"] : []),
+      ...(requestType === "recommendation" ? ["triggerContext", "decisionFacts"] : [])
+    ]);
+    const missingRequirements = [];
+    if (!state.household) missingRequirements.push("household");
+    if (!state.familyRules) missingRequirements.push("familyRules");
+    if (!selectedMembers.some(member => member.id === state.household?.authorizedAdultMemberId)) {
+      missingRequirements.push("authorizedAdult");
+    }
+    if (requiredRecordTypes.includes("subscriptions") && !Array.isArray(state.subscriptions)) {
+      missingRequirements.push("subscriptions");
+    }
+    if (requiredRecordTypes.includes("servicePlans") && !selectedPlans.length) {
+      missingRequirements.push("servicePlans");
+    }
+    if (requiredRecordTypes.includes("catalog") && !selectedCatalog.length) {
+      missingRequirements.push("catalog");
+    }
+    if (requiredRecordTypes.includes("decisionFacts") && !decisionPacket) {
+      missingRequirements.push("decisionFacts");
+    }
+    const contextPlan = {
+      schemaVersion: schemas.versions.contextPlan,
+      intent: selectionIntent({
+        requestType,
+        scope,
+        normalizedMessage,
+        scenarioType: state.scenario?.scenarioType
+      }),
+      scope,
+      entityIds: {
+        services: [...selectedServiceIds],
+        titles: [...selectedTitleIds],
+        members: [...selectedMemberIds]
+      },
+      requiredRecordTypes,
+      selectedRecordCounts,
+      missingRequirements: unique(missingRequirements),
+      selectionReasons: provenance,
+      tokenBudget: {
+        scenario: 9000,
+        focused: 7000,
+        subscription_inventory: 5000,
+        household_wide: 12000
+      }[scope],
+      contextHash: traceFactory.stableHash({
+        householdRevision: state.householdRevision || 0,
+        scope,
+        entities: {
+          services: [...selectedServiceIds],
+          titles: [...selectedTitleIds],
+          members: [...selectedMemberIds]
+        },
+        records: {
+          counts: selectedRecordCounts,
+          subscriptions: selectedSubscriptions.map(record => ({
+            serviceId: record.serviceId,
+            planId: record.planId,
+            status: record.status,
+            monthlyCost: record.monthlyCost,
+            nextRenewal: record.nextRenewal,
+            expirationDate: record.expirationDate
+          })),
+          catalog: selectedCatalog.map(record => ({
+            titleId: record.title_id,
+            serviceId: record.available_service_id,
+            availabilityStart: record.availability_start,
+            availabilityEnd: record.availability_end,
+            migrationServiceId: record.migration_service_id,
+            migrationDate: record.migration_date
+          })),
+          plans: selectedPlans.map(record => ({
+            serviceId: record.service_id,
+            planId: record.plan_id,
+            monthlyPrice: record.monthly_price,
+            pauseEligible: record.pause_eligible,
+            maxPauseDays: record.max_pause_days
+          })),
+          familyRules: state.familyRules
+        }
+      }),
+      coverageStatus: ambiguities.length
+        ? "clarification_required"
+        : missingRequirements.length
+          ? "incomplete"
+          : "complete"
+    };
+    schemas.validateContextPlan(contextPlan);
 
     const activeSubscriptions = (state.subscriptions || []).filter(subscription => subscription.status === "active");
     const activeMonthlySpend = activeSubscriptions.reduce(
@@ -365,6 +509,7 @@
         ambiguities,
         provenance
       },
+      context_plan: contextPlan,
       trigger_context: requestType === "recommendation"
         ? decisionPacket?.triggerContext || state.scenario
         : {
@@ -489,6 +634,7 @@
     });
     return Object.freeze({
       scope,
+      contextPlan,
       householdContext,
       servicePlans: selectedPlans,
       catalogTitles: selectedCatalog,
@@ -497,9 +643,11 @@
         policies,
         tools,
         memoryOutcome: "Household context read; no persistent change yet.",
-        validationOutcome: ambiguities.length
+        validationOutcome: contextPlan.coverageStatus === "clarification_required"
           ? `${ambiguities.length} unresolved context ambiguity requires clarification.`
-          : "Selected context is grounded in stored records and relationship links."
+          : contextPlan.coverageStatus === "incomplete"
+            ? `Context coverage is incomplete: ${contextPlan.missingRequirements.join(", ")}.`
+            : "Selected context is grounded in stored records and relationship links."
       }
     });
   }

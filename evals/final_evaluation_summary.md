@@ -6,8 +6,8 @@
 
 **10 of 10 cases passed.**
 
-- **Prompt hash:** `f52e28c6`
-- **Run completed:** July 28, 2026 at 7:05 PM PDT
+- **Prompt hash:** `05971ddc`
+- **Run completed:** July 29, 2026 at 12:01 PM PDT
 - **Agent model:** `gpt-5.6-terra`
 - **Independent judge model:** `gpt-5.6-luna`
 - **Passed:** 10
@@ -43,7 +43,7 @@ The complete current evidence, including every fixed input, human-readable outpu
 - The shared signal detector produces no recommendation, notification, reminder, model call, or record update when no actionable change exists.
 - The agent recommends subscribing when multiple verified high-priority titles are available, rating-compliant, and affordable within the household budget.
 - The agent recommends a duration-aware pause when a temporary viewing gap fits the service’s verified pause window.
-- The agent enforces a child’s stored rating limit and requests an adult decision for a title-specific exception without weakening the permanent household rule.
+- The agent enforces a child’s stored rating limit and requests an adult decision for a title-specific exception without weakening the standing household rule.
 
 ## Evaluation method
 
@@ -66,4 +66,4 @@ The evaluation cycle produced documented improvements to:
 - schedule future subscriptions one day before release without ever recommending a start date in the past; and
 - distinguish a selected pause’s calendar duration, maximum permitted duration, avoided billing cycles, and required return date.
 
-The final current run was completed after the context-selection and live-trace refinements and confirms that those changes introduced no regression across the ten-case set. All model-driven cases passed structured validation, expected status and action checks, semantic-rubric assessment, and human-control assessment. Every judge result reported an empty `gaps` array.
+The final current run was completed after the context-selection, live-trace, memory-architecture, and instruction-cleanup refinements. It confirms that removing JavaScript field mappings from the instruction prose introduced no regression across the ten-case set. All model-driven cases passed structured validation, expected status and action checks, semantic-rubric assessment, and human-control assessment. Every judge result reported an empty `gaps` array.

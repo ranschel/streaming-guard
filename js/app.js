@@ -10,8 +10,22 @@
   const openAI = global.StreamingGuardOpenAI;
   const evaluationFactory = global.StreamingGuardEvaluations;
   const contextSelector = global.StreamingGuardContextSelector;
+  const traceFactory = global.StreamingGuardTraceManager;
+  const workflowEngine = global.StreamingGuardWorkflow;
 
-  if (![context, math, engine, ui, memoryFactory, toolFactory, openAI, evaluationFactory, contextSelector].every(Boolean)) {
+  if (![
+    context,
+    math,
+    engine,
+    ui,
+    memoryFactory,
+    toolFactory,
+    openAI,
+    evaluationFactory,
+    contextSelector,
+    traceFactory,
+    workflowEngine
+  ].every(Boolean)) {
     throw new Error("Streaming Guard application dependencies failed to load.");
   }
 
@@ -30,7 +44,12 @@
   }
 
   rebaseScenarioDates(math.localDateIso(new Date()), { onlyWhenMissing: true });
-  const tools = toolFactory.createAgentTools({ memory, knowledge: context.knowledge });
+  const traceManager = traceFactory.createTraceManager({ memory });
+  const tools = toolFactory.createAgentTools({
+    memory,
+    knowledge: context.knowledge,
+    traceManager
+  });
   const evaluations = evaluationFactory.createEvaluationRunner({
     knowledge: context.knowledge,
     context,
@@ -66,6 +85,9 @@
   const restartChatButton = document.getElementById("restartChat");
   const downloadFullChatButton = document.getElementById("downloadFullChat");
   const copyAIChatLogButton = document.getElementById("copyAIChatLog");
+  const exportHouseholdDataButton = document.getElementById("exportHouseholdData");
+  const importHouseholdDataButton = document.getElementById("importHouseholdData");
+  const importHouseholdDataInput = document.getElementById("importHouseholdDataInput");
   let responseController = null;
   let chatSequenceVersion = 0;
   let apiActivityTimer = null;
@@ -262,6 +284,50 @@
     global.setTimeout(() => toast.classList.remove("show"), 2400);
   }
 
+  function householdDataFilename() {
+    return `streaming-guard-household-data-${math.localDateIso(new Date())}.json`;
+  }
+
+  function exportHouseholdData() {
+    const payload = memory.exportHouseholdData();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8"
+    });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = householdDataFilename();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    global.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    showToast("Household data exported as JSON");
+  }
+
+  async function importHouseholdData(file) {
+    if (!file) return;
+    let payload;
+    try {
+      payload = JSON.parse(await file.text());
+    } catch (_) {
+      throw new Error("The selected file is not valid JSON.");
+    }
+
+    const householdName =
+      payload?.household?.household?.name ||
+      payload?.memory?.household?.name ||
+      "the exported household";
+    if (!global.confirm(
+      `Import ${householdName}? This will replace durable household details and start a fresh local demo session.`
+    )) return;
+
+    memory.importHouseholdData(payload);
+    rebaseScenarioDates(math.localDateIso(new Date()));
+    renderAll();
+    showProductView("context");
+    showToast("Household data imported");
+  }
+
   async function copyText(text) {
     if (global.navigator.clipboard?.writeText) {
       try {
@@ -329,6 +395,7 @@
         scenarioType: state.scenario?.scenarioType || null,
         systemDate: state.systemDate
       },
+      executionTraces: state.traces || [],
       calls: aiChatDebugLog
     }, null, 2);
   }
@@ -344,6 +411,14 @@
 
   function transact(mutator) {
     memory.transact(mutator);
+    refreshState();
+  }
+
+  function transitionWorkflow(event, details = "") {
+    memory.dispatchWorkflow(event, {
+      traceId: traceManager.activeTraceId(),
+      details
+    });
     refreshState();
   }
 
@@ -720,6 +795,14 @@
         validationOutcome: "Structured response received, grounded, and validated."
       }
     });
+    traceManager.span(
+      "validation",
+      "Structured response received, grounded, and validated."
+    );
+    traceManager.complete({
+      status: "complete",
+      validationOutcome: "Structured response received, grounded, and validated."
+    });
   }
 
   function selectedContextInputSummary(contextSelection, instructionSummary, schemaSummary) {
@@ -729,9 +812,13 @@
     const subscriptions = householdContext.current_subscriptions || [];
     const titles = contextSelection?.catalogTitles || [];
     const scope = String(contextSelection?.scope || "unknown").replaceAll("_", " ");
+    const plan = contextSelection?.contextPlan;
     return [
       instructionSummary,
       `Selection scope: ${scope}`,
+      plan
+        ? `Context plan: ${plan.intent} · ${plan.coverageStatus} · ${plan.contextHash}`
+        : "Context plan unavailable",
       `Members sent: ${members.map(member => member.firstName || member.name || member.id).join(", ") || "none"}`,
       `Subscription records sent: ${subscriptions.map(subscription => subscription.service || subscription.serviceId).join(", ") || "none"}`,
       `Catalog titles sent: ${titles.map(title => title.title_name || title.title_id).join(", ") || "none"}`,
@@ -746,6 +833,22 @@
   function beginApiActivity({ requestType, settings, inputSummary, contextSelection = null }) {
     stopApiActivityTimer();
     const modelInfo = openAI.modelInfo(settings.model);
+    traceManager.start({
+      operation: requestType,
+      promptHash: traceFactory.stableHash({
+        instructionBundleUpdatedAt: context.knowledge.instructionBundleUpdatedAt,
+        requestType
+      }),
+      contextPlan: contextSelection?.contextPlan || null,
+      provider: openAI.providerName(modelInfo?.provider || openAI.providerForModel(settings.model)),
+      model: modelInfo?.label || settings.model
+    });
+    traceManager.span(
+      "context",
+      contextSelection?.contextPlan
+        ? `${contextSelection.contextPlan.intent}; ${contextSelection.contextPlan.coverageStatus}; context ${contextSelection.contextPlan.contextHash}`
+        : "Context selection was not supplied."
+    );
     liveApiActivity = {
       status: "preparing",
       requestType,
@@ -779,6 +882,10 @@
       usageText: usageText(result?.usage),
       error: ""
     });
+    traceManager.span(
+      "model_response",
+      `Response received${result?.responseId ? ` as ${result.responseId}` : ""}.`
+    );
   }
 
   function failApiActivity(error, status = "error") {
@@ -786,6 +893,11 @@
     updateApiActivity({
       status,
       error: error?.message || String(error || "")
+    });
+    traceManager.span("failure", error?.message || String(error || ""), status);
+    traceManager.complete({
+      status,
+      validationOutcome: error?.message || String(error || "")
     });
   }
 
@@ -1190,6 +1302,12 @@
         "Strict structured conversation response schema"
       )
     });
+    transitionWorkflow(workflowEngine.events.INPUT_RECEIVED, "Adult chat input accepted.");
+    transitionWorkflow(
+      workflowEngine.events.CONTEXT_SELECTED,
+      `Context plan ${contextSelection.contextPlan?.contextHash || "unavailable"} selected.`
+    );
+    transitionWorkflow(workflowEngine.events.DECISION_REQUESTED, "Conversation decision requested from the selected model.");
     responseController?.abort();
     responseController = new AbortController();
     setChatBusy(true);
@@ -1229,6 +1347,7 @@
         result = await responsePromise;
       }
       const turn = result.response;
+      transitionWorkflow(workflowEngine.events.OUTPUT_VALIDATED, "Conversation output passed application validation.");
       recordAIChatDebugCall({
         requestType: "conversation",
         attempt: conversationAttempt,
@@ -1250,7 +1369,6 @@
           }
         : applyProposedContextUpdates(turn);
       refreshState();
-      updateCompletedTrace({ turn, updateResult });
       const appliedSubscriptionUpdates = updateResult.applied.filter(update =>
         ["subscription_record", "external_action_confirmation"].includes(update.updateType)
       );
@@ -1315,6 +1433,24 @@
           }
         }
       });
+      if (turn.safetyDisposition === "execution_refused") {
+        transitionWorkflow(workflowEngine.events.EXECUTION_REFUSED, "The advisory execution boundary was enforced.");
+      } else if (updateResult.externalActionConfirmed) {
+        transitionWorkflow(workflowEngine.events.DISCUSSION_OPENED, "Validated output returned to the adult.");
+        transitionWorkflow(workflowEngine.events.ADULT_AGREED, "The adult confirmed the external action.");
+        transitionWorkflow(workflowEngine.events.EXTERNAL_ACTION_CONFIRMED, "The confirmed external action was saved.");
+      } else if (turn.discussionStatus === "external_action_pending") {
+        transitionWorkflow(workflowEngine.events.DISCUSSION_OPENED, "Validated output returned to the adult.");
+        transitionWorkflow(workflowEngine.events.ADULT_AGREED, "Adult agreement recorded; external action remains pending.");
+      } else if (turn.discussionStatus === "resolved") {
+        transitionWorkflow(workflowEngine.events.DISCUSSION_OPENED, "Validated output returned to the adult.");
+        transitionWorkflow(workflowEngine.events.COMPLETE_WITHOUT_ACTION, "The discussion closed without a pending external action.");
+      } else if (turn.safetyDisposition === "adult_judgment_required") {
+        transitionWorkflow(workflowEngine.events.ADULT_JUDGMENT_REQUESTED, "Specific adult information or judgment is required.");
+      } else {
+        transitionWorkflow(workflowEngine.events.DISCUSSION_OPENED, "The adult can continue the conversation.");
+      }
+      updateCompletedTrace({ turn, updateResult });
       const replyText = updateResult.rejected.length
         ? `${turn.reply} I understood the requested update, but I could not validate it against the stored household context, so I did not save it.`
         : turn.reply;
@@ -1369,6 +1505,7 @@
       const friendlyError = error.output
         ? "The AI response could not be validated after one automatic retry. Nothing was changed. Please try again."
         : "The selected AI model could not respond. Nothing was changed. Please try again.";
+      transitionWorkflow(workflowEngine.events.FAILED, friendlyError);
       failApiActivity(
         new Error(error.code === "not_configured" ? error.message : friendlyError),
         error.code === "not_configured" ? "not_connected" : "error"
@@ -1447,6 +1584,15 @@
       draft.review.recommendationUsage = usage;
       draft.review.recommendationError = error;
     });
+    transitionWorkflow(workflowEngine.events.OUTPUT_VALIDATED, "Recommendation output passed application validation.");
+    transitionWorkflow(
+      recommendation.status === "Adult judgment required"
+        ? workflowEngine.events.ADULT_JUDGMENT_REQUESTED
+        : workflowEngine.events.DISCUSSION_OPENED,
+      recommendation.status === "Adult judgment required"
+        ? "The recommendation requires a specific adult judgment."
+        : "The recommendation is ready for adult review."
+    );
   }
 
   async function generateRecommendation(reason) {
@@ -1472,6 +1618,11 @@
         "Strict structured recommendation response schema"
       )
     });
+    transitionWorkflow(
+      workflowEngine.events.CONTEXT_SELECTED,
+      `Context plan ${contextSelection.contextPlan?.contextHash || "unavailable"} selected.`
+    );
+    transitionWorkflow(workflowEngine.events.DECISION_REQUESTED, "Recommendation decision requested from the selected model.");
     transact(draft => {
       draft.review.progressStage = "model_request";
     });
@@ -1484,6 +1635,7 @@
         draft.review.recommendationError = connectionError;
       });
       failApiActivity(new Error(connectionError), "not_connected");
+      transitionWorkflow(workflowEngine.events.FAILED, connectionError);
       return { source: "llm_unavailable", error: new Error(connectionError) };
     }
 
@@ -1535,6 +1687,7 @@
         draft.review.recommendationError = error.message;
       });
       failApiActivity(error);
+      transitionWorkflow(workflowEngine.events.FAILED, error.message);
       return { source: "llm_unavailable", error };
     } finally {
       responseController = null;
@@ -1595,6 +1748,7 @@
       draft.review.recommendationError = null;
       draft.messages = [];
     });
+    transitionWorkflow(workflowEngine.events.INPUT_RECEIVED, "The selected demo trigger was accepted.");
   }
 
   async function runBackgroundSweep({ resetScenario = true } = {}) {
@@ -1696,6 +1850,7 @@
       draft.review.generatedRecommendation = null;
       draft.messages = [];
     });
+    transitionWorkflow(workflowEngine.events.INPUT_RECEIVED, "Manual chat mode is ready for adult input.");
     renderAll();
     messageInput.focus();
   }
@@ -1723,6 +1878,14 @@
       draft.review.reasonCodes = ["recommendation_explicitly_accepted"];
       draft.review.pendingContextUpdates = [];
     });
+    transitionWorkflow(
+      requiresExternalAction
+        ? workflowEngine.events.ADULT_AGREED
+        : workflowEngine.events.COMPLETE_WITHOUT_ACTION,
+      requiresExternalAction
+        ? "Adult agreement recorded; external account action remains pending."
+        : "Adult agreement recorded; no external action is required."
+    );
     sendChat({ role: "user", text: "I agree with the recommendation." });
     if (requiresExternalAction) {
       sendChat({
@@ -1977,6 +2140,10 @@
       draft.review.reasonCodes = ["external_action_confirmed"];
       draft.review.pendingContextUpdates = [];
     });
+    transitionWorkflow(
+      workflowEngine.events.EXTERNAL_ACTION_CONFIRMED,
+      "The adult confirmed the external action and the durable household record was updated."
+    );
     sendChat({ role: "user", text: `I completed the ${state.scenario.targetServiceName} ${language.noun}.` });
     const budgetFollowUpRequired = sendSubscriptionFinancialConfirmation(
       beforeSubscriptionBaseline,
@@ -2009,6 +2176,7 @@
       draft.review.reasonCodes = ["revisit_requested"];
       draft.review.pendingContextUpdates = [];
     });
+    transitionWorkflow(workflowEngine.events.REVISIT_REQUESTED, "The adult reopened the recommendation discussion.");
     sendChat({ role: "user", text: "I want to revisit this recommendation." });
     sendChat({ text: `Of course. We can revisit the ${state.scenario.targetServiceName} recommendation. You can ask a question, disagree, or add more information.` });
     sendChat({ kind: "choices" });
@@ -2129,8 +2297,6 @@
       }
     });
   });
-  document.getElementById("closeMemory").addEventListener("click", () => showProductView("chat", { focusTab: true }));
-  document.getElementById("spendingToChat").addEventListener("click", () => showProductView("chat", { focusTab: true }));
   document.getElementById("askAboutSpending").addEventListener("click", () => {
     showProductView("chat");
     global.setTimeout(() => setComposer("question"), 0);
@@ -2138,6 +2304,16 @@
   document.getElementById("updateHouseholdContext").addEventListener("click", () => {
     showProductView("chat");
     global.setTimeout(() => setComposer("context-update"), 0);
+  });
+  exportHouseholdDataButton.addEventListener("click", exportHouseholdData);
+  importHouseholdDataButton.addEventListener("click", () => importHouseholdDataInput.click());
+  importHouseholdDataInput.addEventListener("change", event => {
+    const [file] = event.target.files || [];
+    importHouseholdData(file)
+      .catch(error => showToast(error.message))
+      .finally(() => {
+        event.target.value = "";
+      });
   });
   document.getElementById("openEvaluationInstructions").addEventListener("click", () => {
     evaluationInstructionsOpen = true;

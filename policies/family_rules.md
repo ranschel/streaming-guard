@@ -16,8 +16,9 @@ These rules and all referenced household records belong to the fictional prototy
 
 - Casey Vale (`MEM-004`, age 9) may be included only for television titles rated TV-G or TV-PG and movies rated G or PG.
 - Riley Vale (`MEM-003`, age 15) may be included for television titles through TV-14 and movies through PG-13.
-- TV-MA and R-rated titles must not be used to justify a subscription for either child.
-- If intended viewers are unclear, request clarification before recommending an action based on the title.
+- TV-MA and R-rated titles must not be used to justify a subscription for a child when the title is on that child's watchlist or the child is an intended viewer.
+- Do not apply a child's rating limit to a title solely because the child belongs to the household.
+- If a title is associated with a child but the intended child viewers are unclear, request clarification before recommending an action based on the title.
 - Only the authorized adult may approve a rating exception.
 - Every exception applies only to one named title and the specifically named child viewer or viewers.
 - A rating exception never permanently changes a child's rating limit and does not apply to another title, sequel, remake, season, service, genre, or future recommendation.

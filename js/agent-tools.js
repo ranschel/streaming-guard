@@ -3,7 +3,8 @@
 
   const math = global.StreamingGuardMath;
   const engine = global.StreamingGuardRecommendationEngine;
-  if (!math || !engine) throw new Error("Streaming Guard tool dependencies failed to load.");
+  const schemas = global.StreamingGuardStateSchemas;
+  if (!math || !engine || !schemas) throw new Error("Streaming Guard tool dependencies failed to load.");
 
   const TOOL_NAMES = Object.freeze([
     "get_service_details",
@@ -65,8 +66,14 @@
     });
   }
 
-  function createAgentTools({ memory, knowledge, clock = () => new Date().toISOString() }) {
+  function createAgentTools({
+    memory,
+    knowledge,
+    traceManager = null,
+    clock = () => new Date().toISOString()
+  }) {
     if (!memory || !knowledge) throw new TypeError("memory and knowledge are required.");
+    let generatedCommandSequence = 0;
 
     function clone(value) {
       return JSON.parse(JSON.stringify(value));
@@ -78,7 +85,9 @@
           tool,
           outcome,
           details,
-          timestamp: clock()
+          timestamp: clock(),
+          traceId: traceManager?.activeTraceId?.() || null,
+          householdRevision: state.householdRevision
         });
         state.toolAudit = state.toolAudit.slice(-100);
       });
@@ -212,9 +221,34 @@
       return clone(result);
     }
 
-    function updateHouseholdContext({ updateType, payload = {}, source = "adult_chat", scope = "permanent" } = {}) {
+    function updateHouseholdContext({
+      updateType,
+      payload = {},
+      source = "adult_chat",
+      scope = "permanent",
+      commandId = "",
+      expectedHouseholdRevision = null,
+      schemaVersion = schemas.versions.toolCommand
+    } = {}) {
       const allowedViewingStatuses = new Set(["not_started", "watching", "completed", "unknown"]);
       const timestamp = clock();
+      const before = memory.getState();
+      const effectiveCommandId = commandId ||
+        `command-${updateType}-${timestamp}-${++generatedCommandSequence}`;
+      const command = {
+        schemaVersion,
+        commandId: effectiveCommandId,
+        expectedHouseholdRevision: expectedHouseholdRevision == null
+          ? Number(before.householdRevision || 0)
+          : Number(expectedHouseholdRevision),
+        updateType,
+        payload
+      };
+      schemas.validateToolCommand(command);
+      if ((before.appliedCommandIds || []).includes(effectiveCommandId)) {
+        recordAudit("update_household_context", "duplicate_ignored", effectiveCommandId);
+        return memory.getState();
+      }
 
       memory.transact(state => {
         if (updateType === "viewing_confirmation") {
@@ -538,9 +572,56 @@
         } else {
           throw new RangeError("Unsupported household update type.");
         }
+
+        const updateProvenance = schemas.provenance({
+          source,
+          recordedAt: timestamp,
+          verifiedAt: timestamp,
+          effectiveFrom: payload.effectiveDate || state.systemDate,
+          confidence: "adult_confirmed"
+        });
+        if (updateType === "viewing_confirmation") {
+          [...state.viewing, ...state.householdViewing].forEach(record => {
+            if ((!payload.memberId || record.memberId === payload.memberId) &&
+                (!payload.titleId || record.titleId === payload.titleId)) {
+              record._provenance = updateProvenance;
+            }
+          });
+        } else if (["subscription_record", "external_action_confirmation"].includes(updateType)) {
+          state.subscriptions.forEach(record => {
+            if ((!payload.serviceId || record.serviceId === payload.serviceId) &&
+                (!payload.service || record.service === payload.service)) {
+              record._provenance = updateProvenance;
+            }
+          });
+        } else if (updateType === "watchlist_item") {
+          state.householdWatchlist.forEach(record => {
+            if (record.memberId === payload.memberId && record.titleId === payload.titleId) {
+              record._provenance = updateProvenance;
+            }
+          });
+        } else if ([
+          "title_rating_exception",
+          "family_rule",
+          "additional_escalation",
+          "remove_additional_escalation"
+        ].includes(updateType)) {
+          state.familyRules._provenance = updateProvenance;
+        }
+        state.appliedCommandIds = [...(state.appliedCommandIds || []), effectiveCommandId].slice(-500);
+      }, {
+        expectedHouseholdRevision: command.expectedHouseholdRevision
       });
 
-      recordAudit("update_household_context", "success", updateType);
+      recordAudit(
+        "update_household_context",
+        "success",
+        `${updateType} · ${effectiveCommandId} · revision ${memory.householdRevision()}`
+      );
+      traceManager?.span?.(
+        "memory_write",
+        `${updateType} applied as ${effectiveCommandId} at household revision ${memory.householdRevision()}.`
+      );
       return memory.getState();
     }
 

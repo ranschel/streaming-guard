@@ -1,7 +1,16 @@
 (function initializeMemoryStore(global) {
   "use strict";
 
+  const schemas = global.StreamingGuardStateSchemas;
+  const persistence = global.StreamingGuardPersistence;
+  const workflowEngine = global.StreamingGuardWorkflow;
+  if (!schemas || !persistence || !workflowEngine) {
+    throw new Error("Streaming Guard state, persistence, and workflow dependencies failed to load.");
+  }
+
   const SENSITIVE_MESSAGE_PLACEHOLDER = "[Sensitive information removed from local chat history.]";
+  const HOUSEHOLD_DATA_FORMAT = "streaming-guard-household-data";
+  const HOUSEHOLD_DATA_VERSION = 1;
 
   function containsSensitiveAccountInformation(text) {
     const value = String(text || "");
@@ -26,14 +35,40 @@
       throw new TypeError("storageKey and createSeedState are required.");
     }
 
-    let state = load();
+    const adapter = persistence.createLocalStorageJsonAdapter(storage);
+    const householdStorageKey = `${storageKey}.household.v1`;
+    const sessionStorageKey = `${storageKey}.session.v1`;
+    const householdRepository = persistence.createVersionedRepository({
+      adapter,
+      key: householdStorageKey,
+      validate: schemas.validateHouseholdDocument,
+      revisionField: "householdRevision",
+      clock
+    });
+    const sessionRepository = persistence.createVersionedRepository({
+      adapter,
+      key: sessionStorageKey,
+      validate: schemas.validateSessionDocument,
+      revisionField: "sessionRevision",
+      clock
+    });
 
     function clone(value) {
-      return JSON.parse(JSON.stringify(value));
+      return schemas.clone(value);
     }
 
-    function normalize(candidate) {
-      const seed = createSeedState(candidate?.scenario?.id);
+    function seedState(scenarioId) {
+      const seed = createSeedState(scenarioId);
+      seed.householdRevision = 0;
+      seed.sessionRevision = 0;
+      seed.appliedCommandIds = [];
+      seed.workflow = workflowEngine.initial();
+      seed.traces = [];
+      return schemas.annotateRecords(seed);
+    }
+
+    function normalize(candidate = {}) {
+      const seed = seedState(candidate?.scenario?.id);
       const savedReview = { ...seed.review, ...(candidate.review || {}) };
       const seedTargetSubscription = seed.subscriptions.find(subscription =>
         subscription.serviceId === seed.scenario.targetServiceId
@@ -60,13 +95,7 @@
       if (savedReview.generatedRecommendation) {
         savedReview.generatedRecommendation = migrateLegacyServiceUrls(savedReview.generatedRecommendation);
       }
-
-      // Migrate prototypes saved before "Wait" was removed as a recommendation
-      // action. Ordinary wording about waiting for a response or an external
-      // action is unaffected.
-      if (savedReview.resolutionAction === "wait") {
-        savedReview.resolutionAction = "keep";
-      }
+      if (savedReview.resolutionAction === "wait") savedReview.resolutionAction = "keep";
       if (savedReview.generatedRecommendation?.actionType === "wait") {
         savedReview.generatedRecommendation = {
           ...savedReview.generatedRecommendation,
@@ -79,19 +108,19 @@
           .replace(/\bchose to wait\b/gi, "chose to keep the current plan unchanged")
           .replace(/\baccepted recommendation to wait\b/gi, "accepted recommendation to keep the current plan unchanged");
       }
-      if (
-        savedReview.resolution === "external_action_confirmed" &&
-        savedReview.externalActionConfirmed !== true
-      ) {
-        savedReview.progressStage = "external_action";
-        savedReview.discussionStatus = "external_action_pending";
-        savedReview.resolution = "recommendation_accepted";
-        savedReview.status = "waiting_for_external_action";
-        savedReview.nextExpectedInput = "external_action_confirmation";
-        savedReview.resolvedAt = null;
-        savedReview.adultDecision = "Agreed with final recommendation";
+      if (savedReview.resolution === "external_action_confirmed" && savedReview.externalActionConfirmed !== true) {
+        Object.assign(savedReview, {
+          progressStage: "external_action",
+          discussionStatus: "external_action_pending",
+          resolution: "recommendation_accepted",
+          status: "waiting_for_external_action",
+          nextExpectedInput: "external_action_confirmation",
+          resolvedAt: null,
+          adultDecision: "Agreed with final recommendation"
+        });
       }
-      return {
+
+      const next = {
         ...seed,
         ...candidate,
         household: { ...seed.household, ...(candidate.household || {}) },
@@ -132,84 +161,190 @@
               } : seedRecord;
             })
           : seed.householdSpendingHistory,
-        recommendationSavingsEvents: Array.isArray(candidate.recommendationSavingsEvents) ? candidate.recommendationSavingsEvents : seed.recommendationSavingsEvents,
-        subscriptionChangeLog: Array.isArray(candidate.subscriptionChangeLog) ? candidate.subscriptionChangeLog : seed.subscriptionChangeLog,
+        recommendationSavingsEvents: Array.isArray(candidate.recommendationSavingsEvents)
+          ? candidate.recommendationSavingsEvents
+          : seed.recommendationSavingsEvents,
+        subscriptionChangeLog: Array.isArray(candidate.subscriptionChangeLog)
+          ? candidate.subscriptionChangeLog
+          : seed.subscriptionChangeLog,
         messages: Array.isArray(candidate.messages)
           ? candidate.messages
             .filter(message => !/^Manual (?:scenario mode|chat) is ready\./i.test(message?.text || ""))
-            .map(message => typeof message?.text === "string"
-            ? {
+            .map(message => {
+              if (typeof message?.text !== "string") return message;
+              const sensitive = containsSensitiveAccountInformation(message.text);
+              return {
                 ...message,
-                text: containsSensitiveAccountInformation(message.text)
+                text: sensitive
                   ? SENSITIVE_MESSAGE_PLACEHOLDER
                   : message.text.replace(
-                        /\s+For example, you can ask me to subscribe to [^.]+ now\.$/i,
-                        ""
-                      ),
-                redacted: containsSensitiveAccountInformation(message.text) || Boolean(message.redacted),
-                redactionReason: containsSensitiveAccountInformation(message.text)
-                  ? "sensitive_information_warning"
-                  : message.redactionReason || null
-              }
-            : message)
+                    /\s+For example, you can ask me to subscribe to [^.]+ now\.$/i,
+                    ""
+                  ),
+                redacted: sensitive || Boolean(message.redacted),
+                redactionReason: sensitive ? "sensitive_information_warning" : message.redactionReason || null
+              };
+            })
           : [],
-        toolAudit: Array.isArray(candidate.toolAudit) ? candidate.toolAudit : []
+        toolAudit: Array.isArray(candidate.toolAudit) ? candidate.toolAudit : [],
+        traces: Array.isArray(candidate.traces) ? candidate.traces : [],
+        appliedCommandIds: Array.isArray(candidate.appliedCommandIds) ? candidate.appliedCommandIds : [],
+        householdRevision: Number.isInteger(candidate.householdRevision) ? candidate.householdRevision : 0,
+        sessionRevision: Number.isInteger(candidate.sessionRevision) ? candidate.sessionRevision : 0
       };
+      next.workflow = candidate.workflow && workflowEngine.states.includes(candidate.workflow.state)
+        ? candidate.workflow
+        : {
+            ...workflowEngine.initial(),
+            state: workflowEngine.deriveFromReview(savedReview)
+          };
+      return schemas.annotateRecords(next);
+    }
+
+    function domainFingerprint(document, revisionField) {
+      const copy = clone(document);
+      delete copy[revisionField];
+      return JSON.stringify(copy);
+    }
+
+    function persistState(nextState) {
+      nextState.review.updatedAt = clock();
+      const documents = schemas.splitState(normalize(nextState));
+      const storedHousehold = householdRepository.load();
+      let savedHousehold = storedHousehold;
+      if (!storedHousehold ||
+          domainFingerprint(storedHousehold, "householdRevision") !==
+          domainFingerprint(documents.household, "householdRevision")) {
+        savedHousehold = householdRepository.save(documents.household, {
+          expectedRevision: storedHousehold?.householdRevision ?? null
+        });
+      }
+      const storedSession = sessionRepository.load();
+      const savedSession = sessionRepository.save(documents.session, {
+        expectedRevision: storedSession?.sessionRevision ?? null
+      });
+      return normalize(schemas.combineState(savedHousehold || documents.household, savedSession));
     }
 
     function load() {
       try {
-        const saved = storage.getItem(storageKey);
-        if (!saved) return createSeedState();
-        const parsed = JSON.parse(saved);
-        const normalized = normalize(parsed);
-        if (JSON.stringify(normalized) !== JSON.stringify(parsed)) {
-          storage.setItem(storageKey, JSON.stringify(normalized));
+        const household = householdRepository.load();
+        const session = sessionRepository.load();
+        if (household && session) return normalize(schemas.combineState(household, session));
+
+        const legacy = adapter.read(storageKey);
+        if (legacy) {
+          const seed = seedState(legacy?.scenario?.id);
+          const migrated = schemas.migrateLegacyState(normalize(legacy), seed);
+          householdRepository.replace(migrated.household);
+          sessionRepository.replace(migrated.session);
+          adapter.remove(storageKey);
+          return normalize(schemas.combineState(migrated.household, migrated.session));
         }
-        return normalized;
       } catch (_) {
-        return createSeedState();
+        householdRepository.remove();
+        sessionRepository.remove();
       }
+      return persistState(seedState());
     }
 
-    function persist() {
-      state.review.updatedAt = clock();
-      storage.setItem(storageKey, JSON.stringify(state));
+    let state = load();
+
+    function validateHouseholdDataExport(candidate) {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+        throw new Error("This file is not a valid Streaming Guard household-data export.");
+      }
+      if (candidate.format !== HOUSEHOLD_DATA_FORMAT || candidate.version !== HOUSEHOLD_DATA_VERSION) {
+        throw new Error("This file uses an unsupported household-data format or version.");
+      }
+      if (candidate.household) return schemas.validateHouseholdDocument(clone(candidate.household));
+      if (candidate.memory) return schemas.splitState(normalize(candidate.memory)).household;
+      throw new Error("The household-data export does not contain durable household memory.");
     }
 
     return Object.freeze({
       getState() {
         return clone(state);
       },
-      transact(mutator, { persist = true } = {}) {
+      transact(mutator, {
+        persist = true,
+        expectedHouseholdRevision = null
+      } = {}) {
         if (typeof mutator !== "function") throw new TypeError("mutator must be a function.");
+        if (expectedHouseholdRevision != null &&
+            Number(state.householdRevision) !== Number(expectedHouseholdRevision)) {
+          const error = new Error(
+            `Household state is at revision ${state.householdRevision}, not ${expectedHouseholdRevision}.`
+          );
+          error.code = "revision_conflict";
+          throw error;
+        }
         const draft = clone(state);
         const result = mutator(draft);
         state = normalize(draft);
-        if (persist) this.save();
+        if (persist) state = persistState(state);
         return result;
       },
+      dispatchWorkflow(event, details = {}) {
+        const timestamp = details.timestamp || clock();
+        this.transact(draft => {
+          draft.workflow = workflowEngine.transition(draft.workflow, event, {
+            ...details,
+            timestamp
+          });
+        });
+        return this.getState().workflow;
+      },
       save() {
-        persist();
+        state = persistState(state);
         return this.getState();
       },
       reset({ scenarioId } = {}) {
-        storage.removeItem(storageKey);
-        state = createSeedState(scenarioId);
-        persist();
+        adapter.remove(storageKey);
+        householdRepository.remove();
+        sessionRepository.remove();
+        state = persistState(seedState(scenarioId));
         return this.getState();
       },
       reload() {
         state = load();
         return this.getState();
       },
-      storageKey
+      exportHouseholdData() {
+        return {
+          format: HOUSEHOLD_DATA_FORMAT,
+          version: HOUSEHOLD_DATA_VERSION,
+          product: "Streaming Guard",
+          exportedAt: clock(),
+          household: schemas.splitState(state).household
+        };
+      },
+      importHouseholdData(candidate) {
+        const importedHousehold = validateHouseholdDataExport(candidate);
+        const freshSession = schemas.splitState(seedState(state.scenario?.id)).session;
+        householdRepository.replace(importedHousehold);
+        sessionRepository.replace(freshSession);
+        adapter.remove(storageKey);
+        state = normalize(schemas.combineState(importedHousehold, freshSession));
+        return this.getState();
+      },
+      householdRevision() {
+        return Number(state.householdRevision || 0);
+      },
+      storageKey,
+      storageKeys: Object.freeze({
+        legacy: storageKey,
+        household: householdStorageKey,
+        session: sessionStorageKey
+      })
     });
   }
 
   global.StreamingGuardMemory = Object.freeze({
     createMemoryStore,
     containsSensitiveAccountInformation,
-    sensitiveMessagePlaceholder: SENSITIVE_MESSAGE_PLACEHOLDER
+    sensitiveMessagePlaceholder: SENSITIVE_MESSAGE_PLACEHOLDER,
+    householdDataFormat: HOUSEHOLD_DATA_FORMAT,
+    householdDataVersion: HOUSEHOLD_DATA_VERSION
   });
 })(window);

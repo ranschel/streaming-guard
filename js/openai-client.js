@@ -525,15 +525,16 @@
           "additional_escalation",
           "remove_additional_escalation",
           "external_action_confirmation"
-        ]
+        ],
+        description: "Choose the record family being changed: viewing_confirmation for reported progress/completion; family_rule for an editable household rule; subscription_record for a service status, plan, price, renewal, or expiration fact; watchlist_item for a member-title priority/status; title_rating_exception for one child and one title; additional_escalation or remove_additional_escalation for household-added escalation conditions; external_action_confirmation only for explicit completion of the matching displayed recommendation."
       },
       targetId: {
         type: "string",
-        description: "The exact household member, service, title, or rule identifier supplied in context."
+        description: "The exact primary identifier from context. Use the member ID for viewing, watchlist, and title-rating updates; the service ID for subscription updates; and the applicable household/rule identifier for rule updates. For external_action_confirmation the application validates and derives the protected target from the displayed recommendation."
       },
       relatedId: {
         type: "string",
-        description: "A second exact identifier when the update relates two records, such as a title for a member or a plan for a service; otherwise an empty string."
+        description: "The exact related identifier from context: title ID for viewing, watchlist, or title-rating updates; plan ID for subscriptionPlan; otherwise an empty string. For a title-rating exception, this title ID must also be repeated in value."
       },
       field: {
         type: "string",
@@ -553,23 +554,25 @@
           "expirationDate",
           "priority",
           "watchlistStatus"
-        ]
+        ],
+        description: "Choose the field that belongs to updateType. Use status for viewing_confirmation; subscriptionPlan, subscriptionStatus, monthlyCost, renewalStatus, nextRenewal, or expirationDate for subscription_record; priority or watchlistStatus for watchlist_item; contentRatingException for title_rating_exception; condition for escalation updates; and the named editable household field for family_rule."
       },
       value: {
         type: "string",
-        description: "The proposed value serialized as a string."
+        description: "The proposed value serialized as a string. For subscriptionPlan, repeat the exact plan ID from relatedId. For title_rating_exception, repeat the exact title ID from relatedId. Use only a grounded enum value, amount, date, identifier, or adult-provided text appropriate to the selected field."
       },
       effectiveDate: {
         type: "string",
-        description: "An ISO date when supplied or required; otherwise an empty string."
+        description: "Use the explicit YYYY-MM-DD effective or completion date when the selected update requires or supplies one; otherwise use an empty string. Never invent a missing date."
       },
       scope: {
         type: "string",
-        enum: ["permanent", "one_time", "not_applicable"]
+        enum: ["permanent", "one_time", "not_applicable"],
+        description: "Use one_time only for a title-specific child-rating exception, permanent for durable household rules or conditions, and not_applicable for ordinary record updates."
       },
       requiresAdultConfirmation: {
         type: "boolean",
-        description: "True when the adult has not yet stated the fact or rule change explicitly enough to write it."
+        description: "False only when the adult explicitly supplied a complete, unambiguous fact or confirmed completing the applicable external action. True when any required value or confirmation is still missing."
       }
     };
     const properties = {
@@ -588,7 +591,7 @@
           "safety_escalation",
           "out_of_scope"
         ],
-        description: "The semantic purpose of the adult's latest message and this response."
+        description: "Classify the semantic purpose: answer for an ordinary question; clarification_request when required information is missing; new_information for an explicit household fact or independently completed change; recommendation_decision for an explicit decision about the displayed recommendation; execution_request for a request that the agent perform an external action; safety_escalation for a protected escalation; out_of_scope for unrelated content."
       },
       discussionStatus: {
         type: "string",
@@ -598,7 +601,7 @@
       outcome: {
         type: "string",
         enum: ["none", "needs_more_information", "recommendation_accepted", "recommendation_declined", "external_action_confirmed", "revisit_requested"],
-        description: "The adult's explicit recommendation disposition, or none when the message is only a question or ordinary discussion."
+        description: "Use none for ordinary discussion, independent new information, refusal, escalation, or out-of-scope handling; needs_more_information for a blocking clarification; recommendation_accepted or recommendation_declined only for an explicit displayed-recommendation decision; external_action_confirmed only for explicit completion of the matching displayed action; revisit_requested only for an explicit request to reopen."
       },
       finalAction: {
         type: "string",
@@ -612,7 +615,7 @@
       recommendationEffect: {
         type: "string",
         enum: ["unchanged", "revise", "reopen", "close"],
-        description: "How this turn affects the displayed recommendation."
+        description: "Use unchanged for ordinary discussion or nonmaterial information; revise only when a complete confirmed context update materially changes the decision; reopen only for revisit_requested; close only after explicit acceptance, rejection, or validated external-action completion."
       },
       nextExpectedInput: {
         type: "string",
@@ -628,7 +631,7 @@
           "external_action_confirmation",
           "additional_context"
         ],
-        description: "The next specific input needed from the adult."
+        description: "The next specific input needed from the adult. Select the matching value for a missing viewing confirmation, completion date, rule scope, title exception, exact subscription plan, budget amount, external-action completion, or other context; use adult_decision when the recommendation is ready for a decision and none when nothing remains."
       },
       safetyDisposition: {
         type: "string",
@@ -668,6 +671,7 @@
       },
       reasonCodes: {
         type: "array",
+        description: "Stable machine-readable reasons that materially describe this turn. Include only codes supported by the supplied facts and structured outcome.",
         items: {
           type: "string",
           enum: [

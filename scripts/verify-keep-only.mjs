@@ -8,6 +8,15 @@ const storage = {
   setItem: (key, value) => memory.set(key, String(value)),
   removeItem: key => memory.delete(key)
 };
+function legacyStorage(storageKey, value) {
+  const values = new Map([[storageKey, value]]);
+  return {
+    values,
+    getItem: key => values.get(key) ?? null,
+    setItem: (key, nextValue) => values.set(key, String(nextValue)),
+    removeItem: key => values.delete(key)
+  };
+}
 const window = {
   localStorage: storage,
   location: { protocol: "file:" },
@@ -32,10 +41,14 @@ for (const file of [
   "js/streaming-guard-math.js",
   "js/scenario-config.js",
   "js/household-context.js",
+  "js/state-schemas.js",
+  "js/persistence-adapters.js",
+  "js/workflow-engine.js",
+  "js/memory-store.js",
   "js/recommendation-engine.js",
+  "js/trace-manager.js",
   "js/context-selector.js",
   "js/openai-client.js",
-  "js/memory-store.js",
   "js/agent-tools.js",
   "js/evaluation-runner.js",
   "js/ui-renderers.js"
@@ -55,21 +68,67 @@ const applicationSource = fs.readFileSync("js/app.js", "utf8");
 const agentToolsSource = fs.readFileSync("js/agent-tools.js", "utf8");
 const clientSource = fs.readFileSync("js/openai-client.js", "utf8");
 const stylesheetSource = fs.readFileSync("css/streaming-guard.css", "utf8");
+const instructionSource = fs.readdirSync("instructions")
+  .filter(file => file.endsWith(".md"))
+  .map(file => fs.readFileSync(`instructions/${file}`, "utf8"))
+  .join("\n");
+
+[
+  "turnType",
+  "discussionStatus",
+  "finalAction",
+  "externalActionRequired",
+  "recommendationEffect",
+  "nextExpectedInput",
+  "safetyDisposition",
+  "reasonCodes",
+  "proposedContextUpdates",
+  "updateType",
+  "targetId",
+  "relatedId",
+  "requiresAdultConfirmation",
+  "selectedPauseDurationDays",
+  "maximumPauseDays",
+  "avoidedBillingCycles",
+  "billing_or_legal_escalation",
+  "execution_refused"
+].forEach(machineToken => {
+  assert(
+    !instructionSource.includes(machineToken),
+    `Instruction prose contains JavaScript/schema mapping token: ${machineToken}`
+  );
+});
+assert(
+  !instructionSource.includes("`gaps`"),
+  "Instruction prose contains the evaluation schema field mapping `gaps`"
+);
 
 assert(
   !Number.isNaN(Date.parse(knowledge.instructionBundleUpdatedAt)),
   "Instruction bundle update timestamp is missing or invalid"
 );
 assert(indexMarkup.includes('class="site-footer-status"'), "Site footer update status is missing");
-assert(
-  indexMarkup.includes('src="js/knowledge-base.js?v=20260729-2"'),
-  "Knowledge bundle cache version is missing"
-);
+assert(indexMarkup.includes('id="exportHouseholdData"'), "Context household-data export control is missing");
+assert(indexMarkup.includes('id="importHouseholdData"'), "Context household-data import control is missing");
+assert(indexMarkup.includes('id="importHouseholdDataInput"'), "Context household-data file input is missing");
+assert(!indexMarkup.includes("Continue to chat"), "Obsolete Continue to Chat controls remain in the product views");
+assert(!applicationSource.includes('getElementById("closeMemory")'), "Removed Context-to-Chat control is still wired");
+assert(!applicationSource.includes('getElementById("spendingToChat")'), "Removed Spending-to-Chat control is still wired");
+assert(applicationSource.includes("memory.exportHouseholdData()"), "Household-data export is not wired to memory");
+assert(applicationSource.includes("memory.importHouseholdData(payload)"), "Household-data import is not wired to memory");
 assert(indexMarkup.includes('class="ai-status-content"'), "Separated AI model status container is missing");
 assert(applicationSource.includes('role("Main model"'), "Main model status block is missing");
 assert(applicationSource.includes('role("Independent judge"'), "Independent judge status block is missing");
 assert(stylesheet.includes(".ai-model-role.agent"), "Main model visual treatment is missing");
 assert(stylesheet.includes(".ai-model-role.judge"), "Judge model visual treatment is missing");
+assert(
+  /\.eval-prompt-fullscreen-button\s*\{[\s\S]*?top:\s*14px;[\s\S]*?right:\s*52px;/.test(stylesheet),
+  "Instruction full-screen control is not anchored to the card header"
+);
+assert(
+  /\.eval-prompt-card summary::after\s*\{[\s\S]*?top:\s*32px;[\s\S]*?right:\s*16px;/.test(stylesheet),
+  "Instruction expand control is not aligned with the full-screen control"
+);
 assert(
   /Last updated <time datetime="[^"]+">[^<]+<\/time>/.test(indexMarkup),
   "Site footer last-updated timestamp is missing"
@@ -85,6 +144,11 @@ const focusedContext = contextSelector.select({
   requestType: "conversation"
 });
 assert.equal(focusedContext.scope, "focused");
+assert.equal(focusedContext.contextPlan.schemaVersion, 1);
+assert.equal(focusedContext.contextPlan.coverageStatus, "complete");
+assert.equal(focusedContext.contextPlan.intent, "focused_conversation");
+assert(focusedContext.contextPlan.contextHash.length >= 8);
+assert(focusedContext.contextPlan.requiredRecordTypes.includes("catalog"));
 assert.deepEqual(
   [...focusedContext.householdContext.context_selection.selected_service_ids].sort(),
   ["SVC-TIDE", "SVC-VIEWFLIX"]
@@ -342,6 +406,8 @@ assert(stylesheet.includes(".rec-financial small, .rec-prominent small { display
 assert(knowledge.evaluationJudge.includes("Judge semantic meaning rather than exact wording"));
 assert(knowledge.evaluationJudge.includes("clearly defers the recommendation, subscription change, charge, or other account action until the adult decides"));
 assert(knowledge.evaluationJudge.includes("explicitly excluded from other titles or ratings"));
+assert(knowledge.evaluationJudge.includes("has the title on their watchlist or is explicitly named as an intended viewer"));
+assert(knowledge.immutableEscalationPolicy.includes("solely because the household includes one or more members under age 18"));
 assert(knowledge.evaluationJudge.includes("authoritative for the exact property described by that check"));
 assert(knowledge.evaluationJudge.includes("never reject an external URL"));
 assert(knowledge.evaluationJudge.includes("A material fact can satisfy an evidence requirement wherever it appears"));
@@ -351,25 +417,29 @@ assert(knowledge.evaluationJudge.includes("Do not require the response to name r
 assert(knowledge.evaluationJudge.includes("keep, leave, retain, or preserve an existing subscription record"));
 assert(knowledge.evaluationJudge.includes("contradiction between the recommended action timing"));
 assert(knowledge.evaluationJudge.includes("Independently assess every remaining material requirement"));
-assert(knowledge.recommendationAddon.includes("selectedPauseDurationDays"));
-assert(knowledge.recommendationAddon.includes("maximumPauseDays"));
-assert(knowledge.recommendationAddon.includes("avoidedBillingCycles"));
+assert(knowledge.recommendationAddon.includes("distinguish the calendar pause window from its billing effect"));
+assert(knowledge.recommendationAddon.includes("maximum permitted pause in calendar days"));
+assert(knowledge.recommendationAddon.includes("Use avoided billing cycles only to calculate and explain savings"));
 assert(client.recommendationSchema().required.includes("selectedPauseDurationDays"));
 assert(client.recommendationSchema().required.includes("maximumPauseDays"));
 assert(client.recommendationSchema().required.includes("avoidedBillingCycles"));
+assert(clientSource.includes("This is not the calendar duration."));
 assert(knowledge.conversationAddon.includes("briefly restate the material issue the adult reported"));
 assert(knowledge.conversationAddon.includes("General frustration, annoyance, or anger"));
 assert(knowledge.conversationAddon.includes("is not a billing-or-legal escalation"));
 assert(knowledge.coreSystemPrompt.includes("present every relevant option you can identify"));
-assert(knowledge.conversationAddon.includes("list every plan for that service"));
-assert(knowledge.conversationAddon.includes("enumerate all relevant choices already known"));
+assert(knowledge.conversationAddon.includes("present every grounded plan option"));
+assert(knowledge.conversationAddon.includes("Present all relevant choices already known"));
+assert(conversationUpdateSchema.properties.relatedId.description.includes("plan ID for subscriptionPlan"));
+assert(conversationUpdateSchema.properties.value.description.includes("repeat the exact plan ID from relatedId"));
+assert(conversationUpdateSchema.properties.requiresAdultConfirmation.description.includes("False only when the adult explicitly supplied"));
 assert(applicationSource.includes("Expected financial impact: the monthly payment changes from"));
 assert(applicationSource.includes("The annualized payment changes from"));
 assert(applicationSource.includes("Household budget utilization changes from"));
 assert(applicationSource.includes("increase it to ${engine.formatMoney(state, impact.afterMonthly)} to match the new spending"));
 assert(applicationSource.includes('budget_amount: ["Budget decision needed"'));
 assert(knowledge.coreSystemPrompt.includes("Never increase the budget automatically"));
-assert(knowledge.conversationAddon.includes("If the adult chooses to match the new spending"));
+assert(knowledge.conversationAddon.includes("If the adult chooses to match current spending"));
 assert(clientSource.includes("validationFeedback"));
 assert(applicationSource.includes("one corrected response was requested automatically"));
 assert(applicationSource.includes("could not be validated after one automatic retry"));
@@ -771,6 +841,23 @@ for (const record of knowledge.agentEvals) {
   assert.equal(childSafety.conflicts[0].titleRating, "TV-MA");
   assert.match(childSafety.conflicts[0].applicableLimit, /TV-G/);
   assert.match(childSafety.conflicts[0].applicableLimit, /TV-PG/);
+
+  const adultOnlyState = structuredClone(childState);
+  adultOnlyState.scenario.intendedViewerIds = [adultOnlyState.household.authorizedAdultMemberId];
+  adultOnlyState.householdWatchlist = adultOnlyState.householdWatchlist.filter(entry =>
+    entry.titleId !== adultOnlyState.scenario.titleId
+  );
+  const adultOnlySafety = engine.buildDecisionPacket(adultOnlyState).childSafety;
+  assert.equal(adultOnlySafety.intendedChildren.length, 0);
+  assert.equal(adultOnlySafety.conflicts.length, 0);
+
+  const childWatchlistEntry = childState.householdWatchlist.find(entry =>
+    entry.titleId === childState.scenario.titleId && entry.memberId === "MEM-004"
+  );
+  adultOnlyState.householdWatchlist.push(structuredClone(childWatchlistEntry));
+  const childWatchlistSafety = engine.buildDecisionPacket(adultOnlyState).childSafety;
+  assert.equal(childWatchlistSafety.conflicts.length, 1);
+  assert.equal(childWatchlistSafety.conflicts[0].memberName, "Casey");
 }
 
 function common(state, actionType, overrides = {}) {
@@ -1604,7 +1691,7 @@ async function runSuite(
   );
   assert(evaluationMarkup.includes('class="eval-instructions-drawer"'), `${label}: instructions drawer was not rendered`);
   assert(evaluationMarkup.includes("Instructions updated"), `${label}: instruction update time was not rendered`);
-  assert(evaluationMarkup.includes("f52e28c6"), `${label}: current instruction hash changed unexpectedly`);
+  assert(evaluationMarkup.includes(regraded.promptHash), `${label}: current instruction hash was not rendered`);
   assert.equal(
     (evaluationMarkup.match(/data-eval-action="open-instruction-fullscreen"/g) || []).length,
     6,
@@ -1918,29 +2005,23 @@ assert.equal(rejectedOutputResult.verdict, "error");
 assert.equal(rejectedOutputResult.output.action, "Keep the bundle unchanged.");
 assert(rejectedOutputRunner.exportResultsText().includes('"action": "Keep the bundle unchanged."'));
 
-const legacyStorage = {
-  value: JSON.stringify({
+const legacyStateStorage = legacyStorage("legacy", JSON.stringify({
     review: {
       resolutionAction: "wait",
       adultDecision: "Accepted recommendation to wait",
       generatedRecommendation: { actionType: "wait", action: "Wait for now." }
     }
-  }),
-  getItem() { return this.value; },
-  setItem(_key, value) { this.value = value; },
-  removeItem() { this.value = null; }
-};
+  }));
 const legacyStore = window.StreamingGuardMemory.createMemoryStore({
   storageKey: "legacy",
   createSeedState: () => context.createSeedState("SG-005"),
-  storage: legacyStorage
+  storage: legacyStateStorage
 });
 const migrated = legacyStore.getState();
 assert.equal(migrated.review.resolutionAction, "keep");
 assert.equal(migrated.review.generatedRecommendation.actionType, "keep");
 
-const sensitiveChatStorage = {
-  value: JSON.stringify({
+const sensitiveChatStorage = legacyStorage("sensitive-chat", JSON.stringify({
     scenario: { id: "SG-001" },
     messages: [{
       id: "message-sensitive",
@@ -1949,11 +2030,7 @@ const sensitiveChatStorage = {
       text: "My password is hunter2",
       time: "1:00 PM"
     }]
-  }),
-  getItem() { return this.value; },
-  setItem(_key, value) { this.value = value; },
-  removeItem() { this.value = null; }
-};
+  }));
 const sensitiveChatStore = window.StreamingGuardMemory.createMemoryStore({
   storageKey: "sensitive-chat",
   createSeedState: context.createSeedState,
@@ -1964,10 +2041,9 @@ assert.equal(
   "[Sensitive information removed from local chat history.]"
 );
 assert.equal(sensitiveChatStore.getState().messages[0].redacted, true);
-assert(!sensitiveChatStorage.value.includes("hunter2"));
+assert(![...sensitiveChatStorage.values.values()].some(value => value.includes("hunter2")));
 
-const legacyUrlStorage = {
-  value: JSON.stringify({
+const legacyUrlStorage = legacyStorage("legacy-urls", JSON.stringify({
     scenario: { id: "SG-001" },
     subscriptions: [{
       id: "SUB-CURRENT-AURORA",
@@ -1982,11 +2058,7 @@ const legacyUrlStorage = {
         nextDetails: "For account help, use https://example.invalid/aurora/support."
       }
     }
-  }),
-  getItem() { return this.value; },
-  setItem(_key, value) { this.value = value; },
-  removeItem() { this.value = null; }
-};
+  }));
 const legacyUrlStore = window.StreamingGuardMemory.createMemoryStore({
   storageKey: "legacy-urls",
   createSeedState: context.createSeedState,
@@ -2001,8 +2073,7 @@ assert.equal(migratedAurora.approvedSupportUrl, "https://www.auroraplus.com/supp
 assert(migratedUrls.review.generatedRecommendation.nextHeadline.includes("https://www.auroraplus.com/"));
 assert(migratedUrls.review.generatedRecommendation.nextDetails.includes("https://www.auroraplus.com/support"));
 
-const failedConfirmationStorage = {
-  value: JSON.stringify({
+const failedConfirmationStorage = legacyStorage("failed-confirmation", JSON.stringify({
     scenario: { id: "SG-001" },
     review: {
       resolution: "external_action_confirmed",
@@ -2012,11 +2083,7 @@ const failedConfirmationStorage = {
       externalActionConfirmed: false,
       nextExpectedInput: "none"
     }
-  }),
-  getItem() { return this.value; },
-  setItem(_key, value) { this.value = value; },
-  removeItem() { this.value = null; }
-};
+  }));
 const recoveredConfirmationStore = window.StreamingGuardMemory.createMemoryStore({
   storageKey: "failed-confirmation",
   createSeedState: context.createSeedState,
@@ -2091,6 +2158,8 @@ assert.equal(
   window.StreamingGuardMath.roundCurrency(baselineMonthlySpend + 16.99)
 );
 assert.equal(generalChatState.subscriptionChangeLog.length, 1);
+assert.equal(summitSubscription._provenance.source, "adult_chat");
+assert.equal(summitSubscription._provenance.confidence, "adult_confirmed");
 
 generalChatTools.update_household_context({
   updateType: "subscription_record",
@@ -2150,4 +2219,83 @@ assert(generalChatStore.getState().householdViewingHistory.some(item =>
   item.memberId === "MEM-001" && item.titleId === "TTL-COPPER" && item.status === "completed"
 ));
 
-console.log("Hybrid evaluation regression passed: all 10 official eval context packets retained their required services, titles, viewers, records, terms, URLs, rules, and deterministic calculations; 40/40 positive fixture runs passed; the shared signal detector classified the local no-action restraint without a model call; both guided demo triggers, the free-form manual scenario, recommendation-independent subscription and household updates, and scenario switching were verified; child-rating, pause-duration math, and semantic judge controls behaved correctly; rejected structured output remained exportable; legacy saved state migrated.");
+const revisionBeforeIdempotentUpdate = generalChatStore.householdRevision();
+const idempotentBudgetCommand = {
+  updateType: "family_rule",
+  payload: { rule: "monthlyBudgetCap", value: 80 },
+  source: "adult_chat",
+  commandId: "test-command-0001",
+  expectedHouseholdRevision: revisionBeforeIdempotentUpdate
+};
+generalChatTools.update_household_context(idempotentBudgetCommand);
+const revisionAfterIdempotentUpdate = generalChatStore.householdRevision();
+const ruleChangesAfterFirstCommand = generalChatStore.getState().familyRules.ruleChanges.length;
+generalChatTools.update_household_context(idempotentBudgetCommand);
+assert.equal(generalChatStore.householdRevision(), revisionAfterIdempotentUpdate);
+assert.equal(generalChatStore.getState().familyRules.ruleChanges.length, ruleChangesAfterFirstCommand);
+assert.throws(
+  () => generalChatTools.update_household_context({
+    updateType: "family_rule",
+    payload: { rule: "monthlyBudgetCap", value: 85 },
+    source: "adult_chat",
+    commandId: "test-command-stale",
+    expectedHouseholdRevision: revisionBeforeIdempotentUpdate
+  }),
+  /revision/
+);
+
+generalChatStore.dispatchWorkflow(window.StreamingGuardWorkflow.events.INPUT_RECEIVED, {
+  details: "Regression input"
+});
+generalChatStore.dispatchWorkflow(window.StreamingGuardWorkflow.events.CONTEXT_SELECTED, {
+  details: "Regression context"
+});
+generalChatStore.dispatchWorkflow(window.StreamingGuardWorkflow.events.DECISION_REQUESTED, {
+  details: "Regression decision"
+});
+assert.equal(generalChatStore.getState().workflow.state, "decision_pending");
+const regressionTraceManager = window.StreamingGuardTraceManager.createTraceManager({
+  memory: generalChatStore,
+  clock: () => "2026-08-15T12:00:00.000Z"
+});
+const regressionTraceId = regressionTraceManager.start({
+  operation: "regression",
+  promptHash: "prompt-hash",
+  contextPlan: focusedContext.contextPlan,
+  model: "test-model",
+  provider: "test-provider"
+});
+regressionTraceManager.span("decision", "Regression decision completed.");
+regressionTraceManager.complete({
+  validationOutcome: "Regression trace validated."
+});
+assert(generalChatStore.getState().traces.some(trace =>
+  trace.traceId === regressionTraceId &&
+  trace.contextHash === focusedContext.contextPlan.contextHash &&
+  trace.validationOutcome === "Regression trace validated."
+));
+assert(generalChatMemory.has("general-chat-updates.household.v1"));
+assert(generalChatMemory.has("general-chat-updates.session.v1"));
+assert(!generalChatMemory.has("general-chat-updates"));
+
+const householdDataExport = generalChatStore.exportHouseholdData();
+assert.equal(householdDataExport.format, "streaming-guard-household-data");
+assert.equal(householdDataExport.version, 1);
+assert.equal(householdDataExport.product, "Streaming Guard");
+assert.equal(householdDataExport.household.household.name, generalChatStore.getState().household.name);
+assert(!("messages" in householdDataExport.household));
+assert(!("review" in householdDataExport.household));
+assert(!JSON.stringify(householdDataExport).includes("openAIApiKey"));
+generalChatStore.transact(draft => {
+  draft.household.name = "Temporary imported-over value";
+});
+generalChatStore.importHouseholdData(householdDataExport);
+assert.equal(generalChatStore.getState().household.name, householdDataExport.household.household.name);
+assert.equal(generalChatStore.getState().traces.length, 0);
+assert.equal(generalChatStore.getState().workflow.state, "not_started");
+assert.throws(
+  () => generalChatStore.importHouseholdData({ format: "unknown", version: 1, memory: {} }),
+  /unsupported household-data format or version/
+);
+
+console.log("Hybrid evaluation regression passed: all 10 official eval context packets retained their required services, titles, viewers, records, terms, URLs, rules, and deterministic calculations; 40/40 positive fixture runs passed; the shared signal detector classified the local no-action restraint without a model call; both guided demo triggers, the free-form manual scenario, recommendation-independent subscription and household updates, household-data JSON export/import, and scenario switching were verified; child-rating, pause-duration math, and semantic judge controls behaved correctly; rejected structured output remained exportable; legacy saved state migrated.");

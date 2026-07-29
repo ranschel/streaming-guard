@@ -69,13 +69,21 @@
     }, -1);
   }
 
+  function childViewerIdsForTitle(state, title) {
+    const viewerIds = new Set(title.intendedViewerIds || []);
+    (state.householdWatchlist || []).forEach(entry => {
+      if (entry.titleId === title.titleId) viewerIds.add(entry.memberId);
+    });
+    return [...viewerIds];
+  }
+
   function titleChildSafetyContext(state, title) {
     const category = ratingCategory(title.contentType);
     const scale = ratingScales[category];
     const titleRating = String(title.contentRating || "").toUpperCase();
     const titleRatingIndex = scale.indexOf(titleRating);
     const exceptions = state.familyRules.contentRatingExceptions || [];
-    const intendedChildren = title.intendedViewerIds
+    const intendedChildren = childViewerIdsForTitle(state, title)
       .map(memberId => memberById(state, memberId))
       .filter(member => member && Number(member.age) < 18)
       .map(member => {

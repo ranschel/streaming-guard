@@ -537,13 +537,13 @@
     .dialog-heading span { display: block; margin-bottom: 3px; color: #75dfc0; font-size: 10px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
     .dialog-heading h2 { margin: 0; color: #f4f8f6; font-size: 24px; letter-spacing: -0.03em; }
     .dialog-heading p { max-width: 680px; margin: 5px 0 0; color: #a8bab5; font-size: 12px; }
-    .context-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
+    .context-header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
+    .context-data-button { min-height: 42px; padding: 10px 17px; color: #b8c8c3; border: 1px solid #526761; border-radius: 10px; background: transparent; font: inherit; font-size: 12px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+    .context-data-button:hover { color: #f4f8f6; border-color: #75dfc0; background: #263b36; }
+    .context-data-button:focus-visible { outline: 3px solid rgba(117, 223, 192, 0.25); outline-offset: 3px; }
     .context-update-button { min-height: 42px; padding: 10px 17px; color: #d9e6e2; border: 1px solid #60756e; border-radius: 10px; background: #263b36; font: inherit; font-size: 12px; font-weight: 800; white-space: nowrap; cursor: pointer; }
     .context-update-button:hover { color: #f4f8f6; border-color: #75dfc0; background: #314940; }
     .context-update-button:focus-visible { outline: 3px solid rgba(117, 223, 192, 0.25); outline-offset: 3px; }
-    .context-dismiss-button { min-height: 42px; padding: 10px 17px; color: #10221e; border: 1px solid #75dfc0; border-radius: 10px; background: #60d1b1; font: inherit; font-size: 12px; font-weight: 800; white-space: nowrap; cursor: pointer; }
-    .context-dismiss-button:hover { border-color: #91efd4; background: #75dfc0; }
-    .context-dismiss-button:focus-visible { outline: 3px solid rgba(117, 223, 192, 0.35); outline-offset: 3px; }
     .dialog-body { width: min(1120px, 100%); margin: 0 auto; padding: 24px clamp(18px, 4vw, 48px) 40px; overflow: auto; }
     .memory-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
     .memory-block { padding: 14px; color: #edf5f2; border: 1px solid #3a504a; border-radius: 14px; background: #263b36; }
@@ -1079,8 +1079,7 @@
     }
     .sidebar .savings-callout strong { color: var(--color-mint-vital); }
 
-    .context-update-button:focus-visible,
-    .context-dismiss-button:focus-visible {
+    .context-update-button:focus-visible {
       outline-color: rgba(0, 177, 255, 0.45);
     }
 
@@ -1443,11 +1442,21 @@
       line-height: 1.44;
     }
     .context-update-button,
-    .context-dismiss-button {
+    .context-data-button {
       min-height: 48px;
       padding: 12px 22px;
       border-radius: 9999px;
       font-weight: 600;
+    }
+    .context-data-button {
+      color: var(--color-ash);
+      border-color: var(--color-iris-border);
+      background: var(--color-iris-shadow);
+    }
+    .context-data-button:hover {
+      color: var(--color-cloud-white);
+      border-color: var(--color-clinical-cyan);
+      background: var(--color-iris-glow);
     }
     .context-update-button {
       color: var(--color-cloud-white);
@@ -1480,16 +1489,6 @@
         transform: scale(1.035);
       }
     }
-    .context-dismiss-button {
-      color: var(--color-cloud-white);
-      border-color: var(--color-iris-pulse);
-      background: var(--color-iris-pulse);
-      box-shadow: 0 0 20px rgba(60, 57, 185, 0.4);
-    }
-    .context-dismiss-button:hover {
-      border-color: var(--color-iris-veil);
-      background: var(--color-iris-veil);
-    }
     .dialog-body {
       width: min(1200px, 100%);
       height: 100%;
@@ -1516,11 +1515,6 @@
     .evaluations-page .dialog-heading p {
       margin-top: 4px;
       font-size: 11px;
-    }
-    .evaluations-page .context-dismiss-button {
-      min-height: 40px;
-      padding: 9px 18px;
-      font-size: 12px;
     }
     .memory-grid { gap: 16px; }
     .memory-block {
@@ -2073,7 +2067,7 @@
     .eval-prompt-card summary::after {
       content: "+";
       position: absolute;
-      top: 50%;
+      top: 32px;
       right: 16px;
       width: 24px;
       height: 24px;
@@ -2089,10 +2083,9 @@
     .eval-prompt-card p { margin: 4px 32px 0 0; color: var(--color-ash); font-size: 12px; }
     .eval-prompt-fullscreen-button {
       position: absolute;
-      top: 50%;
+      top: 14px;
       right: 52px;
       z-index: 1;
-      transform: translateY(-50%);
       min-height: 36px;
       padding: 7px 12px;
       color: var(--color-cloud-white);
@@ -2980,10 +2973,6 @@
         margin: 0;
         font-size: 26px;
       }
-      .evaluations-page .context-dismiss-button {
-        min-height: 34px;
-        padding: 6px 15px;
-      }
       .evaluations-page .dialog-body {
         padding: 8px 16px 12px;
       }
@@ -3140,7 +3129,7 @@
       .composer-mode { align-items: flex-start; flex-direction: column; }
       .dialog-header { align-items: stretch; flex-direction: column; gap: 14px; }
       .context-header-actions { align-items: stretch; flex-direction: column; }
-      .context-update-button, .context-dismiss-button { width: 100%; }
+      .context-update-button, .context-data-button { width: 100%; }
       .eval-scoreboard { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .eval-section-heading, .eval-run-heading, .eval-case-heading, .eval-case-footer, .eval-approval-gate { align-items: stretch; flex-direction: column; }
       .eval-case-heading-actions { width: 100%; justify-content: space-between; }
@@ -3152,7 +3141,7 @@
       .eval-toolbar-actions > button { flex: 0 0 auto; }
       .eval-instructions-drawer { width: 100%; }
       .eval-prompt-card summary { padding-right: 190px; }
-      .eval-prompt-fullscreen-button { right: 52px; }
+      .eval-prompt-fullscreen-button { top: 14px; right: 52px; }
       .eval-instruction-fullscreen > header { min-height: 76px; }
       .memory-grid { grid-template-columns: 1fr; }
       .context-overview-heading { align-items: flex-start; flex-direction: column; }
