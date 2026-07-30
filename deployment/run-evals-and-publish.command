@@ -1,7 +1,7 @@
 #!/bin/zsh
 
 set -e
-cd "${0:A:h}"
+cd "${0:A:h}/.."
 
 echo "Starting the Streaming Guard local evaluation and publishing operator…"
 echo "Leave this window open while the evaluation runs."
@@ -19,7 +19,7 @@ if [[ -z "$NODE_BIN" ]]; then
   fi
 fi
 
-"$NODE_BIN" scripts/local-eval-publish-server.mjs &
+"$NODE_BIN" deployment/local-eval-publish-server.mjs &
 server_pid=$!
 trap 'kill "$server_pid" 2>/dev/null || true' EXIT INT TERM
 

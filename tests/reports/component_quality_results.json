@@ -1,0 +1,36 @@
+{
+  "generatedAt": "2026-07-30T03:42:06.542Z",
+  "testType": "deterministic_component_quality",
+  "passed": 89,
+  "total": 89,
+  "successRate": 100,
+  "targetSuccessRate": 100,
+  "categoryScores": {
+    "memory": {
+      "passed": 29,
+      "total": 29,
+      "successRate": 100
+    },
+    "financial_math": {
+      "passed": 22,
+      "total": 22,
+      "successRate": 100
+    },
+    "safety_validation": {
+      "passed": 27,
+      "total": 27,
+      "successRate": 100
+    },
+    "workflow": {
+      "passed": 5,
+      "total": 5,
+      "successRate": 100
+    },
+    "provider_ui": {
+      "passed": 6,
+      "total": 6,
+      "successRate": 100
+    }
+  },
+  "failures": []
+}

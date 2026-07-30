@@ -2694,30 +2694,6 @@
       font-size: 11px;
       white-space: nowrap;
     }
-    .eval-publish-button {
-      color: var(--color-deep-iris);
-      border-color: var(--color-mint-vital) !important;
-      background: var(--color-mint-vital) !important;
-      font-weight: 700;
-    }
-    .eval-publish-button:disabled {
-      color: var(--color-ash);
-      border-color: var(--color-iris-border) !important;
-      background: var(--color-iris-glow) !important;
-    }
-    .eval-operator-status {
-      margin: 0;
-      padding: 10px 16px;
-      color: var(--color-ash);
-      border-bottom: 1px solid var(--color-iris-border);
-      background: var(--color-iris-shadow);
-      font-size: 12px;
-      line-height: 1.45;
-    }
-    .eval-operator-status.success { color: var(--color-mint-vital); }
-    .eval-operator-status.error { color: #ffb4b4; }
-    .eval-operator-status.warning { color: #ffd78a; }
-    .eval-operator-status.running { color: var(--color-clinical-cyan); }
     .eval-stop-button {
       color: #fff;
       border: 1px solid #ff7d8a;

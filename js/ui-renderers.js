@@ -683,7 +683,7 @@
       {
         key: "evaluationJudge",
         title: "Evaluation Judge Instructions",
-        description: "Section 6 · instructions/evaluation_judge.md",
+        description: "Section 6 · tests/instructions/evaluation_judge.md",
         prompt: model.prompts.evaluationJudge
       }
     ];
@@ -731,15 +731,6 @@
       : "";
     const selectedError = selectedResult?.error ? `<p class="eval-error">${escapeHtml(selectedResult.error)}</p>` : "";
 
-    const operatorButton = model.operatorMode
-      ? `<button class="eval-publish-button" type="button" data-eval-action="run-defaults-and-publish" ${model.operatorAvailable && !running && !model.operatorPublishing ? "" : "disabled"} title="Run all ten cases with the default agent and judge, then publish only if every case passes">${model.operatorPublishing ? "Publishing…" : "Run defaults & publish"}</button>`
-      : "";
-    const operatorStatus = model.operatorMode
-      ? `<p class="eval-operator-status ${escapeHtml(model.operatorStatusType || "")}" role="status">${escapeHtml(model.operatorStatus || (model.operatorAvailable
-        ? "Local publish shortcut ready · Command/Ctrl+Shift+E"
-        : "Start run-evals-and-publish.command to enable validated publishing."))}</p>`
-      : "";
-
     return `<div class="evaluation-runner">
       <section class="eval-command-bar" aria-label="Evaluation controls">
         <div class="eval-score-chips" aria-label="Evaluation results">
@@ -752,7 +743,6 @@
           ${running
             ? `<button class="eval-stop-button" type="button" data-eval-action="stop-tests">Stop tests</button>`
             : `<button class="primary-button" type="button" data-eval-action="run-all" ${canRun ? "" : "disabled"}>${runComplete ? "Run all cases again" : "Run all cases"}</button>`}
-          ${operatorButton}
           <button class="secondary-button" type="button" data-eval-action="copy-all-results" ${model.hasSavedResults && !running ? "" : "disabled"}>Copy output</button>
           <button class="secondary-button" type="button" data-eval-action="clear-results" ${running ? "disabled" : ""}>Clear results</button>
           <details class="eval-more-menu">
@@ -764,7 +754,6 @@
           </details>
         </div>
       </section>
-      ${operatorStatus}
 
       ${model.hasSavedResults && model.counts.not_run === caseCount && model.hasRejudgeableResults ? `<p class="eval-notice">The saved agent outputs are compatible with the current agent instructions. Approve the current judge instructions, then rejudge them without regenerating the responses.</p>` : ""}
       ${model.hasSavedResults && model.counts.not_run === caseCount && !model.hasRejudgeableResults ? `<p class="eval-notice">Saved outputs from an incompatible prompt version remain available through Copy output.</p>` : ""}

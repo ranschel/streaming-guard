@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const outputRoot = path.join(projectRoot, "dist");
+const outputRoot = path.join(projectRoot, "deployment", "dist");
 const serverRoot = path.join(outputRoot, "server");
 const publishedRoots = [
   "index.html",
@@ -11,11 +11,11 @@ const publishedRoots = [
   "assets",
   "css",
   "data",
-  "evals",
   "instructions",
   "js",
   "policies",
-  "prd"
+  "prd",
+  "tests"
 ];
 
 function filesUnder(relativePath) {

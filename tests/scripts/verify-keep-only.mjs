@@ -50,7 +50,7 @@ for (const file of [
   "js/context-selector.js",
   "js/openai-client.js",
   "js/agent-tools.js",
-  "js/evaluation-runner.js",
+  "tests/runtime/evaluation-runner.js",
   "js/ui-renderers.js"
 ]) {
   vm.runInContext(fs.readFileSync(file, "utf8"), sandbox, { filename: file });
@@ -121,13 +121,6 @@ assert(applicationSource.includes('role("Main model"'), "Main model status block
 assert(applicationSource.includes('role("Independent judge"'), "Independent judge status block is missing");
 assert(stylesheet.includes(".ai-model-role.agent"), "Main model visual treatment is missing");
 assert(stylesheet.includes(".ai-model-role.judge"), "Judge model visual treatment is missing");
-assert(applicationSource.includes("runDefaultEvaluationsAndPublish"), "Local default-eval publishing shortcut is not wired");
-assert(applicationSource.includes('"/__streaming_guard/publish"'), "Local validated publish endpoint is not wired");
-assert(applicationSource.includes("completed.counts.pass !== 10"), "Ten-pass publish gate is missing");
-assert(applicationSource.includes("openAI.DEFAULT_MODEL"), "Shortcut does not enforce the default agent model");
-assert(applicationSource.includes("openAI.JUDGE_MODEL"), "Shortcut does not enforce the default judge model");
-assert(applicationSource.includes('global.addEventListener("hashchange", openEvaluationRouteFromHash)'), "Permanent eval-publish hash route is not wired");
-assert(stylesheet.includes(".eval-publish-button"), "Local publish shortcut styling is missing");
 assert(
   /\.eval-prompt-fullscreen-button\s*\{[\s\S]*?top:\s*14px;[\s\S]*?right:\s*52px;/.test(stylesheet),
   "Instruction full-screen control is not anchored to the card header"
@@ -1813,20 +1806,6 @@ async function runSuite(
   assert(evaluationMarkup.includes('data-eval-action="run-all"'), `${label}: run-all action was not rendered`);
   assert(evaluationMarkup.includes('data-eval-action="copy-all-results"'), `${label}: copy-output action was not rendered`);
   assert(evaluationMarkup.includes('data-eval-action="clear-results"'), `${label}: clear-results action was not rendered`);
-  const localOperatorMarkup = window.StreamingGuardUI.evaluationMarkup({
-    ...regraded,
-    operatorMode: true,
-    operatorAvailable: true,
-    operatorPublishing: false
-  });
-  assert(
-    localOperatorMarkup.includes('data-eval-action="run-defaults-and-publish"'),
-    `${label}: localhost operator shortcut was not rendered`
-  );
-  assert(
-    !evaluationMarkup.includes('data-eval-action="run-defaults-and-publish"'),
-    `${label}: GitHub publish shortcut leaked into the public-site evaluation controls`
-  );
   assert(
     evaluationMarkup.indexOf('data-eval-action="rejudge-results"') > evaluationMarkup.indexOf('class="eval-more-menu"'),
     `${label}: rejudge action was not placed in More`

@@ -31,7 +31,9 @@ const blockedTopLevel = new Set([
   ".agents",
   ".codex",
   ".openai",
+  "build",
   "deploy-companion",
+  "deployment",
   "mockups",
   "sources",
   "todo"
@@ -194,14 +196,14 @@ async function publish(payload) {
     throw new Error("The local branch is behind origin/main. Synchronize it before publishing.");
   }
 
-  await run(process.execPath, ["scripts/build-knowledge.mjs"]);
-  await run(process.execPath, ["scripts/verify-keep-only.mjs"]);
-  await run(process.execPath, ["scripts/context-search-benchmark.mjs", "--require=95"]);
+  await run(process.execPath, ["build/build-knowledge.mjs"]);
+  await run(process.execPath, ["tests/scripts/verify-keep-only.mjs"]);
+  await run(process.execPath, ["tests/scripts/context-search-benchmark.mjs", "--require=95"]);
   await run("git", ["diff", "--check"]);
   await assertNoSecrets();
 
   writeFileSync(
-    resolve(root, "evals/final_evaluation_results.md"),
+    resolve(root, "tests/results/final_evaluation_results.md"),
     `${payload.exportText.trim()}\n`,
     "utf8"
   );
@@ -310,6 +312,8 @@ function selfTest() {
   );
   assert.equal(safeStaticPath("/index.html"), resolve(root, "index.html"));
   assert.equal(safeStaticPath("/todo/project_time_log.md"), null);
+  assert.equal(safeStaticPath("/build/build-knowledge.mjs"), null);
+  assert.equal(safeStaticPath("/deployment/local-eval-publish-server.mjs"), null);
   assert.equal(safeStaticPath("/.git/config"), null);
   console.log("Local eval-and-publish operator self-test passed.");
 }

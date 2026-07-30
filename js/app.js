@@ -98,11 +98,6 @@
   let selectedEvaluationId = "EVAL-01";
   let evaluationInstructionsOpen = false;
   let fullScreenEvaluationInstruction = null;
-  const localOperatorMode = ["127.0.0.1", "localhost"].includes(global.location.hostname);
-  let localOperatorAvailable = false;
-  let localOperatorPublishing = false;
-  let localOperatorStatus = "";
-  let localOperatorStatusType = "";
   const stagedMessageDelayMs = 0;
 
   const informationTopics = Object.freeze({
@@ -1054,133 +1049,9 @@
       ...model,
       selectedEvalId: selectedEvaluationId,
       instructionsOpen: evaluationInstructionsOpen,
-      fullScreenInstructionKey: fullScreenEvaluationInstruction,
-      operatorMode: localOperatorMode,
-      operatorAvailable: localOperatorAvailable,
-      operatorPublishing: localOperatorPublishing,
-      operatorStatus: localOperatorStatus,
-      operatorStatusType: localOperatorStatusType
+      fullScreenInstructionKey: fullScreenEvaluationInstruction
     });
     restoreEvaluationScroll(content, scrollState, selectedEvaluationId);
-  }
-
-  async function refreshLocalOperatorAvailability() {
-    if (!localOperatorMode) return false;
-    try {
-      const response = await global.fetch("/__streaming_guard/operator", {
-        cache: "no-store",
-        headers: { Accept: "application/json" }
-      });
-      const body = response.ok ? await response.json() : null;
-      localOperatorAvailable = Boolean(body?.available);
-    } catch (_) {
-      localOperatorAvailable = false;
-    }
-    renderEvaluations();
-    return localOperatorAvailable;
-  }
-
-  function useDefaultEvaluationModels() {
-    const settings = openAI.readSettings();
-    if (!settings.openaiApiKey) {
-      throw new Error("Connect OpenAI before running the default agent and judge.");
-    }
-    if (settings.model === openAI.DEFAULT_MODEL && settings.judgeModel === openAI.JUDGE_MODEL) {
-      return false;
-    }
-    openAI.saveSettings({
-      openaiApiKey: settings.openaiApiKey,
-      anthropicApiKey: settings.anthropicApiKey,
-      geminiApiKey: settings.geminiApiKey,
-      model: openAI.DEFAULT_MODEL,
-      judgeModel: openAI.JUDGE_MODEL
-    });
-    renderAIStatus();
-    return true;
-  }
-
-  function evaluationPublishPayload(model) {
-    return {
-      agentModel: model.model,
-      judgeModel: model.judgeModel,
-      promptHash: model.promptHash,
-      counts: model.counts,
-      cases: model.cases.map(item => ({
-        evalId: item.eval_id,
-        verdict: item.result?.verdict || "not_run",
-        promptHash: item.result?.promptHash || null,
-        completedAt: item.result?.completedAt || null,
-        model: item.result?.model || null,
-        judgeModel: item.result?.judgeModel || null,
-        criteriaCount: item.result?.criteria?.length || 0,
-        criteriaPassed: item.result?.criteria?.filter(check => check.passed).length || 0
-      })),
-      exportText: evaluations.exportResultsText()
-    };
-  }
-
-  async function runDefaultEvaluationsAndPublish() {
-    if (!localOperatorMode) throw new Error("Validated publishing is available only from the localhost site.");
-    if (!localOperatorAvailable && !await refreshLocalOperatorAvailability()) {
-      throw new Error("Start run-evals-and-publish.command, then try again.");
-    }
-    const changedModels = useDefaultEvaluationModels();
-    if (changedModels) {
-      localOperatorStatus = "Default models selected. Review and approve the updated instruction fingerprint, then run the shortcut again.";
-      localOperatorStatusType = "warning";
-      renderEvaluations();
-      throw new Error(localOperatorStatus);
-    }
-    const before = evaluations.model();
-    if (!before.promptApproved) {
-      evaluationInstructionsOpen = true;
-      renderEvaluations();
-      throw new Error("Review and approve all six instruction sections and ten expected outcomes before publishing.");
-    }
-    if (!global.confirm(
-      "Run all ten evaluation cases with GPT-5.6 Terra and independent GPT-5.6 Luna judging? A GitHub push will occur only if all ten pass."
-    )) return;
-
-    localOperatorStatus = "Running all ten cases with the default agent and independent judge…";
-    localOperatorStatusType = "running";
-    renderEvaluations();
-    await evaluations.runAll(renderEvaluations);
-    const completed = evaluations.model();
-    if (
-      completed.counts.pass !== 10 ||
-      completed.counts.fail !== 0 ||
-      completed.counts.error !== 0 ||
-      completed.counts.not_run !== 0
-    ) {
-      localOperatorStatus = `Publish blocked: ${completed.counts.pass} passed, ${completed.counts.fail} failed, ${completed.counts.error} errors, ${completed.counts.not_run} not run.`;
-      localOperatorStatusType = "error";
-      renderEvaluations();
-      showToast("Evaluation did not pass 10 of 10; GitHub was not changed");
-      return;
-    }
-
-    localOperatorPublishing = true;
-    localOperatorStatus = "All ten cases passed. Running local validation and publishing to GitHub…";
-    localOperatorStatusType = "running";
-    renderEvaluations();
-    try {
-      const response = await global.fetch("/__streaming_guard/publish", {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(evaluationPublishPayload(completed))
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.ok) throw new Error(result.error || "The validated GitHub publish failed.");
-      localOperatorStatus = `${result.message} GitHub Pages will update shortly.`;
-      localOperatorStatusType = "success";
-      showToast(`Published ${result.commit} after 10 of 10 passed`);
-    } finally {
-      localOperatorPublishing = false;
-      renderEvaluations();
-    }
   }
 
   function renderAIStatus() {
@@ -2645,10 +2516,6 @@
       }
       if (action === "run-all") {
         await evaluations.runAll(renderEvaluations);
-        return;
-      }
-      if (action === "run-defaults-and-publish") {
-        await runDefaultEvaluationsAndPublish();
       }
     } catch (error) {
       showToast(error.message);
@@ -2865,21 +2732,6 @@
   });
 
   document.addEventListener("keydown", event => {
-    if (
-      localOperatorMode &&
-      (event.metaKey || event.ctrlKey) &&
-      event.shiftKey &&
-      event.key.toLowerCase() === "e"
-    ) {
-      event.preventDefault();
-      renderEvaluations();
-      showProductView("evaluations");
-      runDefaultEvaluationsAndPublish().catch(error => {
-        showToast(error.message);
-        renderEvaluations();
-      });
-      return;
-    }
     if (event.key !== "Escape") return;
     if (fullScreenEvaluationInstruction) {
       const instructionKey = fullScreenEvaluationInstruction;
@@ -2907,22 +2759,6 @@
     render: renderAll
   });
 
-  function openEvaluationRouteFromHash() {
-    if (global.location.hash !== "#evaluations" && global.location.hash !== "#eval-publish") return;
-    renderEvaluations();
-    showProductView("evaluations");
-    if (global.location.hash !== "#eval-publish") return;
-    refreshLocalOperatorAvailability().then(available => {
-      if (!available || global.location.hash !== "#eval-publish") return;
-      runDefaultEvaluationsAndPublish().catch(error => {
-        showToast(error.message);
-        renderEvaluations();
-      });
-    });
-  }
-
-  global.addEventListener("hashchange", openEvaluationRouteFromHash);
-
   function deliverDailyReminderIfDue() {
     refreshState();
     if (!state.review.dailyReminderEnabled || state.review.externalActionConfirmed) return;
@@ -2940,10 +2776,5 @@
 
   deliverDailyReminderIfDue();
   renderAll();
-  if (global.location.hash === "#evaluations" || global.location.hash === "#eval-publish") {
-    openEvaluationRouteFromHash();
-  } else {
-    showProductView("chat");
-    refreshLocalOperatorAvailability();
-  }
+  showProductView("chat");
 })(window);

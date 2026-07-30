@@ -382,8 +382,8 @@ const report = {
   failures: results.filter(result => !result.passed)
 };
 
-const reportPath = "reports/context_search_benchmark_results.json";
-fs.mkdirSync("reports", { recursive: true });
+const reportPath = "tests/reports/context_search_benchmark_results.json";
+fs.mkdirSync("tests/reports", { recursive: true });
 fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 
 console.log(`Context search benchmark: ${passed}/${results.length} passed (${successRate}%).`);

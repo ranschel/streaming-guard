@@ -39,8 +39,6 @@ The Spending view contains the current monthly total, budget utilization, curren
 
 The Evals view contains the ten-case evaluation runner. The first five cases preserve the official capstone baseline; EVAL-06 and EVAL-07 add the original PRD billing-escalation and silent-no-action cases; EVAL-08 and EVAL-09 add supported subscribe and duration-aware pause decisions; and EVAL-10 tests the child-rating boundary and title-specific adult exception. Pause recommendations carry three independently validated structured values—selected calendar days, maximum permitted days, and avoided billing cycles—so models cannot conflate a 57-day pause with two avoided monthly charges. The semantic judge accepts natural equivalents such as keeping or retaining an existing record instead of requiring the literal phrase “no record change.” A compact results dashboard continuously shows passed, failed, error, and not-run totals. The top action bar keeps **Run all cases**, **Copy output**, and **Clear results** visible, while **Rejudge saved outputs** and **Revoke instructions approval** live under **More**. During an active run, **Stop tests** replaces **Run all cases**, aborts the in-flight model request, preserves completed results, and leaves unstarted cases as not run. The separate **Instructions** button in the page header opens the six exact instruction files, fingerprint, and approval gate without reducing the result area. The results-first workspace uses a narrow selectable ten-case list and gives the remaining space to one focused case. Human-readable input and output appear first; the case definition, deterministic and judge checks, structured response, and raw judge result are collapsible. On narrow screens, the case list becomes a horizontal selector above the result. No evaluation is available until the user reviews the instruction bundle and explicitly approves its current fingerprint. Editing an instruction, case definition, agent-model selection, or judge-model selection automatically invalidates that approval and hides results from the older version. Nine cases each make one call to the selected agent model and one call to the separately selected semantic-judge model; EVAL-07 runs its fixed inputs through the shared signal detector locally and verifies that the no-action path makes no model call. **Copy output** creates a paste-ready report containing every saved verdict, structured check, judge assessment, error, prompt hash, and complete output. **Rejudge saved outputs** sends compatible saved agent outputs to the selected judge without regenerating the responses; compatibility requires the same agent model, agent instructions, and case definitions.
 
-When the canonical project is served by the included localhost operator, Evals also shows **Run defaults & publish**. The shortcut enforces `gpt-5.6-terra` for agent responses and `gpt-5.6-luna` for independent judging, runs all ten current cases, and sends a publish request only when the result is exactly ten passes with zero failures, errors, or unrun cases. The localhost operator independently checks the model roles, prompt hash, case evidence, completion times, and grading criteria; runs the knowledge build, complete regression, context-search benchmark, diff validation, protected-PRD check, credential scan, and remote-branch check; saves the complete current evaluation evidence; then commits and pushes `main`. Any failed check stops before the GitHub push. The shortcut never stores or sends a GitHub token through the browser.
-
 ## Product principles
 
 - **Advisory only:** Streaming Guard cannot purchase, cancel, pause, pay for, or modify an external account.
@@ -81,7 +79,7 @@ Streaming Guard uses a hybrid agent architecture. Deterministic tools assemble v
 
 A persistent footer provides self-contained **About**, **Terms of Use**, **Privacy Policy**, and **Copyright** panels. The privacy disclosure explains browser-local storage, optional direct provider API requests, evaluation-call approval, saved-key controls, and the prohibition on real sensitive information.
 
-The CSV, JSON, policy, and LLM-instruction files remain the editable sources of truth. `scripts/build-knowledge.mjs` generates the checked-in browser knowledge bundle used by the double-click demo. `js/scenario-config.js` selects the active source-backed scenario and review horizon; service, plan, title, household members, viewing records, subscription snapshot, prices, and relative dates are resolved from the knowledge bundle at runtime. When the LLM is connected, the same layers can be assembled into its runtime context.
+The CSV, JSON, policy, and LLM-instruction files remain the editable sources of truth. `build/build-knowledge.mjs` generates the checked-in browser knowledge bundle used by the double-click demo. `js/scenario-config.js` selects the active source-backed scenario and review horizon; service, plan, title, household members, viewing records, subscription snapshot, prices, and relative dates are resolved from the knowledge bundle at runtime. When the LLM is connected, the same layers can be assembled into its runtime context.
 
 ## Repository structure
 
@@ -96,7 +94,6 @@ The CSV, JSON, policy, and LLM-instruction files remain the editable sources of 
 ├── js/
 │   ├── agent-tools.js
 │   ├── app.js
-│   ├── evaluation-runner.js
 │   ├── household-context.js
 │   ├── knowledge-base.js
 │   ├── memory-store.js
@@ -113,8 +110,6 @@ The CSV, JSON, policy, and LLM-instruction files remain the editable sources of 
 │       ├── html2canvas.LICENSE.txt
 │       └── html2canvas.min.js
 ├── data/
-│   ├── agent_evals.csv
-│   ├── eval_cases.csv
 │   ├── family_rules.json
 │   ├── household_members_profile.json
 │   ├── household_profile.json
@@ -130,17 +125,39 @@ The CSV, JSON, policy, and LLM-instruction files remain the editable sources of 
 │   ├── immutable_escalation_policy.md
 │   ├── runtime_grounding_rules.md
 │   ├── recommendation_add_on.md
-│   ├── conversation_add_on.md
-│   └── evaluation_judge.md
+│   └── conversation_add_on.md
 ├── policies/
 │   └── family_rules.md
-├── evals/
-│   ├── final_evaluation_results.md
-│   └── final_evaluation_summary.md
-├── scripts/
+├── build/
 │   ├── build-knowledge.mjs
 │   ├── build-sites-static.mjs
-│   └── verify-keep-only.mjs
+│   └── sync-project.sh
+├── tests/
+│   ├── fixtures/
+│   │   ├── agent_evals.csv
+│   │   └── eval_cases.csv
+│   ├── instructions/
+│   │   └── evaluation_judge.md
+│   ├── runtime/
+│   │   └── evaluation-runner.js
+│   ├── scripts/
+│   │   ├── context-search-benchmark.mjs
+│   │   ├── run-quality-gates.mjs
+│   │   ├── verify-component-quality.mjs
+│   │   └── verify-keep-only.mjs
+│   ├── reports/
+│   │   ├── component_quality_results.json
+│   │   ├── context_search_benchmark_results.json
+│   │   └── deterministic_quality_summary.json
+│   └── results/
+│       ├── final_evaluation_results.md
+│       └── final_evaluation_summary.md
+├── deployment/
+│   ├── local-eval-publish-server.mjs
+│   ├── run-evals-and-publish.command
+│   └── dist/
+│       └── server/
+│           └── index.js
 ├── prd/
 │   └── streaming_guard_prd.md
 └── todo/
@@ -164,8 +181,6 @@ The current browser demo persists household memory and runtime state in separate
 
 Choose **Connect AI Models** in the global top banner, enter the keys for the providers you intend to use, and select separate agent and judge models. The banner is available from every product tab and is the single place where connection status and both model roles appear. Supported choices are GPT-5.6 Sol, Terra, and Luna; Claude Fable 5, Opus 4.8, Sonnet 5, and Haiku 4.5; and Gemini 3.5 Flash, 3.6 Flash, and 3.5 Flash-Lite. The defaults remain `gpt-5.6-terra` for the agent and `gpt-5.6-luna` for the judge.
 
-For the guarded local release shortcut, double-click `run-evals-and-publish.command`, keep its Terminal window open, and use **Run defaults & publish** in Evals. The permanent local URL is `http://127.0.0.1:8000/#eval-publish`; the regular prototype remains available at `http://127.0.0.1:8000/`. Command/Ctrl+Shift+E invokes the same action. The six-section instruction review and approval remains mandatory. The shortcut is available only on `127.0.0.1` or `localhost`; it is intentionally absent from the public GitHub Pages interface.
-
 OpenAI requests use the Responses API, Anthropic requests use the Messages API, and Gemini requests use `generateContent`; every adapter uses the provider’s JSON-schema response feature. All three receive the same immutable system prompt, escalation policy, recommendation style examples, current household context, source-freshness dates, actual trigger context, applicable title rating, validated URLs, feasible actions, deterministic calculations, and recent conversation. The application never supplies a preselected action, status, or expected eval route.
 
 Agent and judge models can be changed independently and may use different providers. A full ten-case evaluation makes nine calls to the selected agent provider and nine calls to the selected judge provider; the no-action restraint case runs locally. **Rejudge saved outputs** preserves compatible agent outputs and makes only nine new calls to the currently selected judge.
@@ -180,7 +195,9 @@ The application validates every proposed update before invoking a controlled too
 
 Before every model request, the context selector creates and validates a `ContextPlan` containing the inferred intent, scope, resolved service/title/viewer IDs, required record types, selected record counts, selection reasons, context budget, coverage status, and stable context hash. Its hybrid retrieval combines exact keyword matches, typo-tolerant fuzzy matches, local semantic concepts, and household relationships such as watchlist ownership, viewing status, service availability, priorities, ratings, and release schedules. Domain gating prevents unrelated questions from pulling household context. Missing coverage or ambiguous entities remain explicit instead of being hidden by a prompt. Important records carry source, recorded/verified dates, effective dates, and confidence metadata. Each live interaction also records a privacy-safe trace linking the input, instruction fingerprint, context hash, model response, validation, tools, workflow transitions, and any memory write.
 
-The repeatable context-search benchmark contains 126 labeled keyword, semantic, mixed, negative, held-out, and portfolio-comparison queries. The current implementation passes 126 of 126 cases (100%), exceeding the 95% target. Broad comparative savings requests retrieve the active subscription portfolio and its relevant plan, contract, watchlist, viewing, and budget records; entity-specific questions remain focused, and unrelated savings questions retrieve no household context. Run the benchmark with `node scripts/context-search-benchmark.mjs --require=95`; the machine-readable result is saved to `reports/context_search_benchmark_results.json`.
+The repeatable context-search benchmark contains 126 labeled keyword, semantic, mixed, negative, held-out, and portfolio-comparison queries. The current implementation passes 126 of 126 cases (100%), exceeding the 95% target. Broad comparative savings requests retrieve the active subscription portfolio and its relevant plan, contract, watchlist, viewing, and budget records; entity-specific questions remain focused, and unrelated savings questions retrieve no household context. Run the benchmark with `node tests/scripts/context-search-benchmark.mjs --require=95`; the machine-readable result is saved to `tests/reports/context_search_benchmark_results.json`.
+
+Run `node tests/scripts/run-quality-gates.mjs` for the complete deterministic release gate. It executes 89 focused component assertions across memory, financial math, safety and validation, workflow, provider configuration, and UI contracts; the 126-case context benchmark; and the full cross-component regression. All deterministic gates must pass at 100%. Machine-readable results are written to `tests/reports/component_quality_results.json`, `tests/reports/context_search_benchmark_results.json`, and `tests/reports/deterministic_quality_summary.json`. Live model quality remains a separate probabilistic gate: repeat the ten-case evaluation runner enough times to measure the selected agent and judge models, and require at least 95% of model-driven cases to pass.
 
 The application persists the conversation outcome, shows only the latest relevant chat controls, removes decision buttons when the discussion is resolved, and replaces the right-side progress tracker with a compact outcome card. A resolved no-action decision can be reopened with **Revisit recommendation**. Guided scenarios show their recommendation steps and decision summary; the unstructured manual scenario hides both while retaining its short scenario explanation and live model-communication status. The left-side monthly streaming card displays the true budget-utilization percentage even above 100%; when spending exceeds the cap, the card switches to a red warning treatment and states the positive amount over budget instead of showing a negative remaining balance.
 
@@ -231,7 +248,7 @@ EVAL-07 has six deterministic workflow checks: the shared signal detector ran, a
 
 The evaluation runner and runtime validators contain no word-matching or regular-expression grading of natural-language output. Clear paraphrases, natural evidence statements, and synonyms are assessed for meaning by the judge. JavaScript checks structured target and action fields directly and uses regular expressions only to extract exact URLs, complete calendar dates, and currency amounts for source-backed grounding validation. When those deterministic checks pass, the judge treats each explicitly validated property as authoritative instead of second-guessing it from public brand names. A material fact can satisfy the rubric wherever it appears in the complete response; technical record labels and repetition in a dedicated evidence array are not required. The judge still independently checks that every materially required fact and behavior is present. Every case also includes a manual-review panel with a plain-English version of the complete fixed input and the actual output. Raw structured agent and judge results—or the complete local workflow result for EVAL-07—remain available underneath for technical inspection, and the copy-all export includes both readable and structured evidence.
 
-The final current Develop evaluation passed **10 of 10 cases** with zero failures, API errors, or material judge gaps under prompt hash `05971ddc`. Nine cases used `gpt-5.6-terra` for the agent response and `gpt-5.6-luna` for independent judging. EVAL-07 used the shared deterministic signal detector and intentionally made no model call. See the [evaluation summary](evals/final_evaluation_summary.md) and [complete results](evals/final_evaluation_results.md).
+The final current Develop evaluation passed **10 of 10 cases** with zero failures, API errors, or material judge gaps under prompt hash `05971ddc`. Nine cases used `gpt-5.6-terra` for the agent response and `gpt-5.6-luna` for independent judging. EVAL-07 used the shared deterministic signal detector and intentionally made no model call. See the [evaluation summary](tests/results/final_evaluation_summary.md) and [complete results](tests/results/final_evaluation_results.md).
 
 The instruction architecture has one agent-global layer, two agent task add-ons, and one independent judge instruction:
 
@@ -254,9 +271,9 @@ Automated verdicts report only what the five explicit checks establish for each 
 - [Runtime Grounding Rules](instructions/runtime_grounding_rules.md)
 - [Recommendation Add-On](instructions/recommendation_add_on.md)
 - [Conversation Add-On](instructions/conversation_add_on.md)
-- [Evaluation Judge Instructions](instructions/evaluation_judge.md)
-- [Final Evaluation Summary](evals/final_evaluation_summary.md)
-- [Complete Final Evaluation Results](evals/final_evaluation_results.md)
+- [Evaluation Judge Instructions](tests/instructions/evaluation_judge.md)
+- [Final Evaluation Summary](tests/results/final_evaluation_summary.md)
+- [Complete Final Evaluation Results](tests/results/final_evaluation_results.md)
 - [Household rules](policies/family_rules.md)
 - [Prototype fast-follow tracker](todo/streaming_guard_fast_follows.md)
 

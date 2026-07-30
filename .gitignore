@@ -8,7 +8,7 @@ AGENTS.md
 sources/
 
 # Local synchronization and work records
-scripts/sync-project.sh
+build/sync-project.sh
 todo/project_sync.md
 todo/project_time_log.md
 
@@ -29,4 +29,4 @@ mockups/
 browser_state/
 evaluation_exports/
 exports/
-dist/
+deployment/dist/
