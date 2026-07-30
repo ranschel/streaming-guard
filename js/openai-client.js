@@ -234,10 +234,11 @@
     };
   }
 
-  function recentConversation(messages) {
+  function recentConversation(messages, limit = 6) {
+    if (!Number.isInteger(limit) || limit <= 0) return "";
     return (messages || [])
-      .filter(message => message.text)
-      .slice(-10)
+      .filter(message => message.text && !message.redacted)
+      .slice(-limit)
       .map(message => `${message.role === "user" ? "Adult" : "Streaming Guard"}: ${message.text}`)
       .join("\n");
   }
@@ -952,6 +953,16 @@
     }
     if (
       candidate.safetyDisposition === "adult_judgment_required" &&
+      candidate.turnType === "answer" &&
+      candidate.outcome === "needs_more_information" &&
+      candidate.discussionStatus === "open" &&
+      candidate.finalAction === "none" &&
+      !candidate.externalActionRequired
+    ) {
+      candidate.turnType = "clarification_request";
+    }
+    if (
+      candidate.safetyDisposition === "adult_judgment_required" &&
       !["clarification_request", "safety_escalation"].includes(candidate.turnType)
     ) {
       throw new Error("Adult judgment must be represented as clarification or safety escalation.");
@@ -1168,7 +1179,7 @@
       "Deterministically selected household context, feasible actions, and calculations (no recommendation has been preselected):",
       JSON.stringify(selectedContext.householdContext, null, 2),
       "\nRecent conversation:",
-      recentConversation(state.messages) || "No previous text messages."
+      recentConversation(state.messages, selectedContext.recentConversationLimit) || "No relevant previous text messages."
     ].join("\n");
     const result = await requestResponse({
       instructions,
@@ -1264,7 +1275,7 @@
       "\nSelected fictional title catalog:",
       JSON.stringify(titleCatalog, null, 2),
       "\nRecent conversation:",
-      recentConversation(state.messages) || "No previous text messages.",
+      recentConversation(state.messages, selectedContext.recentConversationLimit) || "No relevant previous text messages.",
       "\nAdult's latest message:",
       userText,
       validationFeedback

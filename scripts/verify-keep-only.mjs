@@ -121,6 +121,13 @@ assert(applicationSource.includes('role("Main model"'), "Main model status block
 assert(applicationSource.includes('role("Independent judge"'), "Independent judge status block is missing");
 assert(stylesheet.includes(".ai-model-role.agent"), "Main model visual treatment is missing");
 assert(stylesheet.includes(".ai-model-role.judge"), "Judge model visual treatment is missing");
+assert(applicationSource.includes("runDefaultEvaluationsAndPublish"), "Local default-eval publishing shortcut is not wired");
+assert(applicationSource.includes('"/__streaming_guard/publish"'), "Local validated publish endpoint is not wired");
+assert(applicationSource.includes("completed.counts.pass !== 10"), "Ten-pass publish gate is missing");
+assert(applicationSource.includes("openAI.DEFAULT_MODEL"), "Shortcut does not enforce the default agent model");
+assert(applicationSource.includes("openAI.JUDGE_MODEL"), "Shortcut does not enforce the default judge model");
+assert(applicationSource.includes('global.addEventListener("hashchange", openEvaluationRouteFromHash)'), "Permanent eval-publish hash route is not wired");
+assert(stylesheet.includes(".eval-publish-button"), "Local publish shortcut styling is missing");
 assert(
   /\.eval-prompt-fullscreen-button\s*\{[\s\S]*?top:\s*14px;[\s\S]*?right:\s*52px;/.test(stylesheet),
   "Instruction full-screen control is not anchored to the card header"
@@ -147,6 +154,10 @@ assert.equal(focusedContext.scope, "focused");
 assert.equal(focusedContext.contextPlan.schemaVersion, 1);
 assert.equal(focusedContext.contextPlan.coverageStatus, "complete");
 assert.equal(focusedContext.contextPlan.intent, "focused_conversation");
+assert.equal(focusedContext.contextPlan.searchStrategy, "hybrid_keyword_semantic");
+assert(Array.isArray(focusedContext.contextPlan.retrievalSignals.keywordMatches));
+assert(Array.isArray(focusedContext.contextPlan.retrievalSignals.fuzzyMatches));
+assert(Array.isArray(focusedContext.contextPlan.retrievalSignals.semanticMatches));
 assert(focusedContext.contextPlan.contextHash.length >= 8);
 assert(focusedContext.contextPlan.requiredRecordTypes.includes("catalog"));
 assert.deepEqual(
@@ -214,6 +225,36 @@ assert(broadContext.householdContext.household_watchlist.length > 0);
 assert(broadContext.householdContext.candidate_services.length > 1);
 assert(broadContext.catalogTitles.length < knowledge.catalog.length);
 
+const comparativeCancellationContext = contextSelector.select({
+  state: inventoryContextState,
+  knowledge,
+  decisionPacket: engine.buildDecisionPacket(inventoryContextState),
+  userText: "Can you recommend a service for cancellation that will save us $10 a month?",
+  requestType: "conversation"
+});
+assert.equal(comparativeCancellationContext.contextPlan.intent, "spending_review");
+assert.equal(comparativeCancellationContext.scope, "household_wide");
+assert.equal(comparativeCancellationContext.contextPlan.coverageStatus, "complete");
+assert.equal(
+  comparativeCancellationContext.householdContext.current_subscriptions.length,
+  inventoryContextState.subscriptions.filter(subscription => subscription.status === "active").length
+);
+assert(comparativeCancellationContext.servicePlans.length >= 5);
+assert(comparativeCancellationContext.contextPlan.retrievalSignals.semanticMatches.some(match =>
+  match.id === "household_wide_spending_comparison"
+));
+
+const grocerySavingsContext = contextSelector.select({
+  state: inventoryContextState,
+  knowledge,
+  decisionPacket: engine.buildDecisionPacket(inventoryContextState),
+  userText: "Can you save me $10 a month on groceries?",
+  requestType: "conversation"
+});
+assert.equal(grocerySavingsContext.contextPlan.intent, "out_of_scope");
+assert.equal(grocerySavingsContext.householdContext.current_subscriptions.length, 0);
+assert.equal(grocerySavingsContext.servicePlans.length, 0);
+
 const ambiguousChildContext = contextSelector.select({
   state: contextSelectionState,
   knowledge,
@@ -228,6 +269,84 @@ assert.deepEqual(
   [...ambiguousChildContext.householdContext.context_selection.selected_member_ids].sort(),
   ["MEM-003", "MEM-004"]
 );
+
+const loggedCallState = context.createSeedState("SG-001");
+context.rebaseStateDates(loggedCallState, "2026-07-29");
+loggedCallState.review.manualScenario = true;
+const loggedCallPacket = engine.buildDecisionPacket(loggedCallState);
+const loggedContext = userText => contextSelector.select({
+  state: loggedCallState,
+  knowledge,
+  decisionPacket: loggedCallPacket,
+  userText,
+  requestType: "conversation"
+});
+
+const productMetaContext = loggedContext("What's the success of Streaming Guard in real life situation?");
+assert.equal(productMetaContext.intent, "product_meta");
+assert.equal(productMetaContext.householdContext.household, null);
+assert.equal(productMetaContext.householdContext.current_family_rules, null);
+assert.equal(productMetaContext.householdContext.household_watchlist.length, 0);
+assert.equal(productMetaContext.householdContext.recent_completed_viewing.length, 0);
+assert.equal(productMetaContext.recentConversationLimit, 0);
+assert.equal(productMetaContext.householdContext.product_context.productionOutcomeEvidenceAvailable, false);
+
+const timeContext = loggedContext("What time is it?");
+assert.equal(timeContext.intent, "out_of_scope");
+assert.deepEqual([...timeContext.householdContext.context_selection.selected_service_ids], []);
+assert.deepEqual([...timeContext.householdContext.context_selection.selected_title_ids], []);
+assert.equal(timeContext.householdContext.household_watchlist.length, 0);
+assert.equal(timeContext.householdContext.household, null);
+
+const starwardContext = loggedContext("How's in Starward");
+assert.equal(starwardContext.intent, "focused_conversation");
+assert.deepEqual([...starwardContext.householdContext.context_selection.selected_title_ids], ["TTL-STARWARD"]);
+assert(starwardContext.householdContext.context_selection.selected_service_ids.includes("SVC-AURORA"));
+assert.equal(starwardContext.householdContext.household_watchlist.length, 2);
+assert.equal(starwardContext.householdContext.viewing_information.length, 2);
+assert.equal(starwardContext.catalogTitles.length, 1);
+assert.equal(
+  starwardContext.catalogTitles[0].next_air_start_date,
+  starwardContext.householdContext.household_watchlist[0].nextReleaseDate
+);
+
+const familyRosterContext = loggedContext("What are the names of my kids and wife?");
+assert.equal(familyRosterContext.intent, "household_roster");
+assert.deepEqual(
+  [...familyRosterContext.householdContext.family_members.map(member => member.id)].sort(),
+  ["MEM-001", "MEM-002", "MEM-003", "MEM-004"]
+);
+assert.equal(familyRosterContext.householdContext.current_family_rules, null);
+assert.equal(familyRosterContext.householdContext.household_watchlist.length, 0);
+assert.equal(familyRosterContext.householdContext.viewing_information.length, 0);
+assert.equal(familyRosterContext.recentConversationLimit, 0);
+
+const childrenRosterContext = loggedContext("Who are the kids in this family?");
+assert.equal(childrenRosterContext.intent, "household_roster");
+assert.deepEqual(
+  [...childrenRosterContext.householdContext.family_members.map(member => member.id)].sort(),
+  ["MEM-003", "MEM-004"]
+);
+assert.equal(childrenRosterContext.householdContext.household_watchlist.length, 0);
+assert.equal(childrenRosterContext.householdContext.recent_completed_viewing.length, 0);
+
+const unknownExecutionContext = loggedContext("Subscribe to Netflix for me");
+assert.equal(unknownExecutionContext.intent, "external_execution_request");
+assert.equal(unknownExecutionContext.contextPlan.coverageStatus, "complete");
+assert.deepEqual([...unknownExecutionContext.contextPlan.missingRequirements], []);
+assert.deepEqual([...unknownExecutionContext.householdContext.context_selection.selected_service_ids], []);
+assert.equal(unknownExecutionContext.householdContext.household, null);
+assert.equal(unknownExecutionContext.householdContext.current_subscriptions.length, 0);
+assert.equal(unknownExecutionContext.servicePlans.length, 0);
+assert.equal(unknownExecutionContext.householdContext.household_watchlist.length, 0);
+
+assert(
+  applicationSource.indexOf("if (!isLikelyStreamingScopeMessage(text))") <
+    applicationSource.indexOf("openAI.isModelConfigured(providerSettings.model, providerSettings)"),
+  "Out-of-scope screening must happen before every configured model call"
+);
+assert(clientSource.includes("message.text && !message.redacted"));
+assert(clientSource.includes("selectedContext.recentConversationLimit"));
 
 assert(clientSource.includes("selectedContext.householdContext"));
 assert(clientSource.includes("selectedContext.servicePlans.map"));
@@ -264,16 +383,27 @@ for (const evalId of officialEvalIds) {
   if (scenario.secondary_service_id) {
     assert(selection.selected_service_ids.includes(scenario.secondary_service_id), `${evalId}: secondary service omitted`);
   }
-  assert(selection.selected_title_ids.includes(scenario.title_id), `${evalId}: primary title omitted`);
   assert(packet.servicePlans.some(plan => plan.service_id === scenario.primary_service_id), `${evalId}: service plan omitted`);
-  assert(packet.catalogTitles.some(title => title.title_id === scenario.title_id), `${evalId}: title catalog record omitted`);
   assert(
     packet.householdContext.current_subscriptions.some(subscription =>
       subscription.serviceId === scenario.primary_service_id
     ),
     `${evalId}: household subscription record omitted`
   );
-  assert(packet.householdContext.current_family_rules, `${evalId}: family rules omitted`);
+  if (["EVAL-04", "EVAL-06"].includes(evalId)) {
+    assert.equal(packet.contextPlan.intent, "external_execution_request");
+    assert.equal(packet.householdContext.current_family_rules, null);
+    assert.equal(packet.householdContext.household_watchlist.length, 0);
+    assert.equal(packet.householdContext.viewing_information.length, 0);
+    if (evalId === "EVAL-04") {
+      assert.deepEqual([...selection.selected_title_ids], []);
+      assert.equal(packet.catalogTitles.length, 0);
+    }
+  } else {
+    assert(selection.selected_title_ids.includes(scenario.title_id), `${evalId}: primary title omitted`);
+    assert(packet.catalogTitles.some(title => title.title_id === scenario.title_id), `${evalId}: title catalog record omitted`);
+    assert(packet.householdContext.current_family_rules, `${evalId}: family rules omitted`);
+  }
   assert.equal(selection.ambiguities.length, 0, `${evalId}: selector introduced an unexpected ambiguity`);
 }
 
@@ -356,13 +486,13 @@ assert.equal(
   window.StreamingGuardMemory.containsSensitiveAccountInformation("Cancel Aurora+ before renewal"),
   false
 );
-assert.equal(
-  window.StreamingGuardMemory.sensitiveMessagePlaceholder,
-  "[Sensitive information removed from local chat history.]"
-);
-assert(applicationSource.includes("persistAdultMessage(text, turn.safetyDisposition)"));
-assert(applicationSource.includes("[Out-of-scope message not retained.]"));
-assert(applicationSource.includes("[Message not retained because it could not be safely classified.]"));
+assert(applicationSource.includes("displayAdultMessageWithoutRetention(text, turn.safetyDisposition)"));
+assert(applicationSource.includes("displayAdultMessageWithoutRetention(text, \"sensitive_information_warning\")"));
+assert(applicationSource.includes("displayAdultMessageWithoutRetention(text, \"out_of_scope\")"));
+assert(applicationSource.includes("sessionOnlyChatMessages"));
+assert(applicationSource.includes("content excluded from persistence, context, logs, and model requests"));
+assert(!applicationSource.includes("[Out-of-scope message not retained.]"));
+assert(!applicationSource.includes("[Message not retained because it could not be safely classified.]"));
 assert(applicationSource.includes("containsSensitiveAccountInformation(text)"));
 assert(applicationSource.includes("const safetyOnlyTurn"));
 assert(applicationSource.includes("safetyOnlyTurn"));
@@ -1447,6 +1577,27 @@ assert.equal(JSON.stringify(normalizedExternalConfirmation.proposedContextUpdate
 assert(applicationSource.includes("serviceId: state.scenario.targetServiceId"));
 assert(applicationSource.includes("newStatus: expectedStatus"));
 
+const normalizedRosterClarification = client.validateConversationResponse({
+  reply: "Riley and Casey are the recorded children. Jordan is recorded as an adult household member, but the stored relationship is not specified.",
+  turnType: "answer",
+  discussionStatus: "open",
+  outcome: "needs_more_information",
+  finalAction: "none",
+  externalActionRequired: false,
+  recommendationEffect: "unchanged",
+  nextExpectedInput: "additional_context",
+  safetyDisposition: "adult_judgment_required",
+  refusalSections: {
+    yourRequest: "",
+    myResponse: "",
+    whyRefusing: "",
+    whatYouCanDoNext: ""
+  },
+  reasonCodes: ["clarification_needed"],
+  proposedContextUpdates: []
+}, null, externalConfirmationPacket, externalConfirmationState);
+assert.equal(normalizedRosterClarification.turnType, "clarification_request");
+
 const manualSubscriptionState = context.createSeedState("SG-001");
 context.rebaseStateDates(manualSubscriptionState, "2026-08-15");
 const manualSubscriptionPacket = engine.buildDecisionPacket(manualSubscriptionState);
@@ -1662,6 +1813,20 @@ async function runSuite(
   assert(evaluationMarkup.includes('data-eval-action="run-all"'), `${label}: run-all action was not rendered`);
   assert(evaluationMarkup.includes('data-eval-action="copy-all-results"'), `${label}: copy-output action was not rendered`);
   assert(evaluationMarkup.includes('data-eval-action="clear-results"'), `${label}: clear-results action was not rendered`);
+  const localOperatorMarkup = window.StreamingGuardUI.evaluationMarkup({
+    ...regraded,
+    operatorMode: true,
+    operatorAvailable: true,
+    operatorPublishing: false
+  });
+  assert(
+    localOperatorMarkup.includes('data-eval-action="run-defaults-and-publish"'),
+    `${label}: localhost operator shortcut was not rendered`
+  );
+  assert(
+    !evaluationMarkup.includes('data-eval-action="run-defaults-and-publish"'),
+    `${label}: GitHub publish shortcut leaked into the public-site evaluation controls`
+  );
   assert(
     evaluationMarkup.indexOf('data-eval-action="rejudge-results"') > evaluationMarkup.indexOf('class="eval-more-menu"'),
     `${label}: rejudge action was not placed in More`
@@ -2036,11 +2201,7 @@ const sensitiveChatStore = window.StreamingGuardMemory.createMemoryStore({
   createSeedState: context.createSeedState,
   storage: sensitiveChatStorage
 });
-assert.equal(
-  sensitiveChatStore.getState().messages[0].text,
-  "[Sensitive information removed from local chat history.]"
-);
-assert.equal(sensitiveChatStore.getState().messages[0].redacted, true);
+assert.equal(sensitiveChatStore.getState().messages.length, 0);
 assert(![...sensitiveChatStorage.values.values()].some(value => value.includes("hunter2")));
 
 const legacyUrlStorage = legacyStorage("legacy-urls", JSON.stringify({

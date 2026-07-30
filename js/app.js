@@ -93,9 +93,16 @@
   let apiActivityTimer = null;
   let liveApiActivity = { status: "idle" };
   let aiChatDebugLog = [];
+  let pendingChatMessages = [];
+  let sessionOnlyChatMessages = [];
   let selectedEvaluationId = "EVAL-01";
   let evaluationInstructionsOpen = false;
   let fullScreenEvaluationInstruction = null;
+  const localOperatorMode = ["127.0.0.1", "localhost"].includes(global.location.hostname);
+  let localOperatorAvailable = false;
+  let localOperatorPublishing = false;
+  let localOperatorStatus = "";
+  let localOperatorStatusType = "";
   const stagedMessageDelayMs = 0;
 
   const informationTopics = Object.freeze({
@@ -137,7 +144,7 @@
         <p><strong>Last updated: July 28, 2026</strong></p>
         <h3>Data stored in this browser</h3>
         <p>Prototype household context, chat history, recommendation progress, evaluation state, and optional provider settings are stored in this browser using local storage. Streaming Guard does not operate a project database or server that receives this local state.</p>
-        <p>Adult messages are safety-classified before they become persistent chat history. Messages identified as sensitive or outside Streaming Guard’s scope are replaced with neutral redaction notices, and an unclassified message is discarded if the selected model cannot respond safely. Obvious credentials and payment details are blocked locally before any model request. Previously saved messages containing recognizable credentials are redacted when local state is loaded.</p>
+        <p>Adult messages remain visible exactly as entered in the current chat. Messages identified as sensitive or clearly outside Streaming Guard’s scope are displayed only for the current browser session: their content is not added to persistent chat history, household context, AI request logs, or model requests. Previously saved messages containing recognizable credentials are removed when local state is loaded.</p>
         <h3>AI-provider connections</h3>
         <p>If you connect OpenAI, Anthropic, or Google Gemini and request a recommendation or chat response, the relevant system instructions, fictional household context, calculations, recent conversation, and your message are sent directly from this browser to the provider selected for the agent. Evaluation cases are sent only after you explicitly approve the instruction bundle and run a case. Each evaluation output is then sent to the separately selected judge provider with its fixed case and expected behavior for independent semantic assessment.</p>
         <p>The API key is stored in this browser’s local storage for this private prototype. A publicly deployed version should use a secure server-side connection instead.</p>
@@ -910,22 +917,48 @@
   function renderConversation() {
     const preservedScrollTop = messagesElement.scrollTop;
     const recommendation = currentRecommendation();
-    if (!state.review.started && !state.messages.length) {
+    if (
+      !state.review.started &&
+      !state.messages.length &&
+      !sessionOnlyChatMessages.length &&
+      !pendingChatMessages.length
+    ) {
       messagesElement.innerHTML = ui.welcomeMarkup();
     } else {
       const lastControlIndex = state.messages.findLastIndex(message => ["choices", "confirmation"].includes(message.kind));
-      const messages = state.messages.map((message, index) => ui.messageMarkup(message, {
+      const transcript = [];
+      for (let index = 0; index <= state.messages.length; index += 1) {
+        sessionOnlyChatMessages
+          .filter(message => Math.min(message.insertAt, state.messages.length) === index)
+          .forEach(message => {
+            transcript.push(ui.messageMarkup(message, {
+              state,
+              recommendation,
+              accountUrl: targetAccountUrl(),
+              activeControl: false
+            }));
+          });
+        if (index < state.messages.length) {
+          transcript.push(ui.messageMarkup(state.messages[index], {
+            state,
+            recommendation,
+            accountUrl: targetAccountUrl(),
+            activeControl: index === lastControlIndex
+          }));
+        }
+      }
+      const pendingMessages = pendingChatMessages.map(message => ui.messageMarkup(message, {
         state,
         recommendation,
         accountUrl: targetAccountUrl(),
-        activeControl: index === lastControlIndex
+        activeControl: false
       })).join("");
       const conversationLabel = state.review.manualScenario
         ? "Manual scenario"
         : state.review.started
           ? "Subscription review"
           : "Household context update";
-      messagesElement.innerHTML = `<div class="day-marker">${conversationLabel} · ${ui.escapeHtml(engine.displayDate(state.systemDate, state.household.locale))}</div>${messages}`;
+      messagesElement.innerHTML = `<div class="day-marker">${conversationLabel} · ${ui.escapeHtml(engine.displayDate(state.systemDate, state.household.locale))}</div>${transcript.join("")}${pendingMessages}`;
     }
     renderDetails(recommendation);
     global.requestAnimationFrame(() => {
@@ -1021,9 +1054,133 @@
       ...model,
       selectedEvalId: selectedEvaluationId,
       instructionsOpen: evaluationInstructionsOpen,
-      fullScreenInstructionKey: fullScreenEvaluationInstruction
+      fullScreenInstructionKey: fullScreenEvaluationInstruction,
+      operatorMode: localOperatorMode,
+      operatorAvailable: localOperatorAvailable,
+      operatorPublishing: localOperatorPublishing,
+      operatorStatus: localOperatorStatus,
+      operatorStatusType: localOperatorStatusType
     });
     restoreEvaluationScroll(content, scrollState, selectedEvaluationId);
+  }
+
+  async function refreshLocalOperatorAvailability() {
+    if (!localOperatorMode) return false;
+    try {
+      const response = await global.fetch("/__streaming_guard/operator", {
+        cache: "no-store",
+        headers: { Accept: "application/json" }
+      });
+      const body = response.ok ? await response.json() : null;
+      localOperatorAvailable = Boolean(body?.available);
+    } catch (_) {
+      localOperatorAvailable = false;
+    }
+    renderEvaluations();
+    return localOperatorAvailable;
+  }
+
+  function useDefaultEvaluationModels() {
+    const settings = openAI.readSettings();
+    if (!settings.openaiApiKey) {
+      throw new Error("Connect OpenAI before running the default agent and judge.");
+    }
+    if (settings.model === openAI.DEFAULT_MODEL && settings.judgeModel === openAI.JUDGE_MODEL) {
+      return false;
+    }
+    openAI.saveSettings({
+      openaiApiKey: settings.openaiApiKey,
+      anthropicApiKey: settings.anthropicApiKey,
+      geminiApiKey: settings.geminiApiKey,
+      model: openAI.DEFAULT_MODEL,
+      judgeModel: openAI.JUDGE_MODEL
+    });
+    renderAIStatus();
+    return true;
+  }
+
+  function evaluationPublishPayload(model) {
+    return {
+      agentModel: model.model,
+      judgeModel: model.judgeModel,
+      promptHash: model.promptHash,
+      counts: model.counts,
+      cases: model.cases.map(item => ({
+        evalId: item.eval_id,
+        verdict: item.result?.verdict || "not_run",
+        promptHash: item.result?.promptHash || null,
+        completedAt: item.result?.completedAt || null,
+        model: item.result?.model || null,
+        judgeModel: item.result?.judgeModel || null,
+        criteriaCount: item.result?.criteria?.length || 0,
+        criteriaPassed: item.result?.criteria?.filter(check => check.passed).length || 0
+      })),
+      exportText: evaluations.exportResultsText()
+    };
+  }
+
+  async function runDefaultEvaluationsAndPublish() {
+    if (!localOperatorMode) throw new Error("Validated publishing is available only from the localhost site.");
+    if (!localOperatorAvailable && !await refreshLocalOperatorAvailability()) {
+      throw new Error("Start run-evals-and-publish.command, then try again.");
+    }
+    const changedModels = useDefaultEvaluationModels();
+    if (changedModels) {
+      localOperatorStatus = "Default models selected. Review and approve the updated instruction fingerprint, then run the shortcut again.";
+      localOperatorStatusType = "warning";
+      renderEvaluations();
+      throw new Error(localOperatorStatus);
+    }
+    const before = evaluations.model();
+    if (!before.promptApproved) {
+      evaluationInstructionsOpen = true;
+      renderEvaluations();
+      throw new Error("Review and approve all six instruction sections and ten expected outcomes before publishing.");
+    }
+    if (!global.confirm(
+      "Run all ten evaluation cases with GPT-5.6 Terra and independent GPT-5.6 Luna judging? A GitHub push will occur only if all ten pass."
+    )) return;
+
+    localOperatorStatus = "Running all ten cases with the default agent and independent judge…";
+    localOperatorStatusType = "running";
+    renderEvaluations();
+    await evaluations.runAll(renderEvaluations);
+    const completed = evaluations.model();
+    if (
+      completed.counts.pass !== 10 ||
+      completed.counts.fail !== 0 ||
+      completed.counts.error !== 0 ||
+      completed.counts.not_run !== 0
+    ) {
+      localOperatorStatus = `Publish blocked: ${completed.counts.pass} passed, ${completed.counts.fail} failed, ${completed.counts.error} errors, ${completed.counts.not_run} not run.`;
+      localOperatorStatusType = "error";
+      renderEvaluations();
+      showToast("Evaluation did not pass 10 of 10; GitHub was not changed");
+      return;
+    }
+
+    localOperatorPublishing = true;
+    localOperatorStatus = "All ten cases passed. Running local validation and publishing to GitHub…";
+    localOperatorStatusType = "running";
+    renderEvaluations();
+    try {
+      const response = await global.fetch("/__streaming_guard/publish", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(evaluationPublishPayload(completed))
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) throw new Error(result.error || "The validated GitHub publish failed.");
+      localOperatorStatus = `${result.message} GitHub Pages will update shortly.`;
+      localOperatorStatusType = "success";
+      showToast(`Published ${result.commit} after 10 of 10 passed`);
+    } finally {
+      localOperatorPublishing = false;
+      renderEvaluations();
+    }
   }
 
   function renderAIStatus() {
@@ -1074,6 +1231,52 @@
       renderAIStatus();
     }
     document.getElementById("openAISettings").classList.toggle("thinking", busy);
+  }
+
+  function chatMessageTime() {
+    return new Intl.DateTimeFormat(state.household.locale || "en-US", {
+      hour: "numeric",
+      minute: "2-digit"
+    }).format(new Date());
+  }
+
+  function showPendingConversation(text) {
+    const time = chatMessageTime();
+    pendingChatMessages = [
+      {
+        id: `pending-user-${Date.now()}`,
+        role: "user",
+        kind: "text",
+        text,
+        time,
+        pending: true
+      },
+      {
+        id: `pending-agent-${Date.now()}`,
+        role: "agent",
+        kind: "processing",
+        text: "Processing",
+        time: "",
+        pending: true
+      }
+    ];
+    renderConversation();
+  }
+
+  function showPendingDecision() {
+    pendingChatMessages = [{
+      id: `pending-agent-${Date.now()}`,
+      role: "agent",
+      kind: "processing",
+      text: "Processing",
+      time: "",
+      pending: true
+    }];
+    renderConversation();
+  }
+
+  function clearPendingChat() {
+    pendingChatMessages = [];
   }
 
   function applyContextUpdateProposal(update, turn) {
@@ -1248,25 +1451,49 @@
     return result;
   }
 
-  const CHAT_REDACTION_TEXT = Object.freeze({
-    sensitive_information_warning: global.StreamingGuardMemory.sensitiveMessagePlaceholder,
-    out_of_scope: "[Out-of-scope message not retained.]",
-    unclassified: "[Message not retained because it could not be safely classified.]"
-  });
-
-  function persistAdultMessage(text, safetyDisposition = "normal") {
-    const replacement = CHAT_REDACTION_TEXT[safetyDisposition];
+  function persistAdultMessage(text) {
     return sendChat({
       role: "user",
-      text: replacement || text,
-      redacted: Boolean(replacement),
-      redactionReason: replacement ? safetyDisposition : null
+      text
     });
   }
 
+  function displayAdultMessageWithoutRetention(text, safetyDisposition) {
+    const message = {
+      id: `session-only-user-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      role: "user",
+      kind: "text",
+      text,
+      time: chatMessageTime(),
+      insertAt: state.messages.length,
+      sessionOnly: true,
+      safetyDisposition
+    };
+    sessionOnlyChatMessages.push(message);
+    recordLiveTraceTool(
+      "display_session_only_message",
+      "Adult message displayed verbatim for this browser session; content excluded from persistence, context, logs, and model requests."
+    );
+    renderConversation();
+    return message;
+  }
+
   function isLikelyStreamingScopeMessage(text) {
-    return /\b(?:streaming|subscription|service|plan|price|cost|spend|budget|renew|billing|bill|cancel|pause|subscribe|watch|watchlist|viewing|movie|show|series|season|episode|title|release|catalog|rating|parental|family|household|aurora|tideplay|viewflix|summit|orbit|triostream|meadow)\b/i
-      .test(String(text || ""));
+    const message = String(text || "");
+    const activePlanningFollowUp = Boolean(currentRecommendation()) && (
+      /\b(?:agree|disagree|approve|reject|override|revisit|not yet|tell me more|why|what if|i did it|i completed it|it is done)\b/i
+        .test(message) ||
+      (
+        state.review.nextExpectedInput &&
+        state.review.nextExpectedInput !== "none" &&
+        /^(?:yes|no|okay|ok|correct|finished|completed|done)\b/i.test(message.trim())
+      )
+    );
+    return activePlanningFollowUp || contextSelector.isLikelyStreamingRequest({
+      message,
+      state,
+      knowledge: context.knowledge
+    });
   }
 
   function recordSafetyDisposition(safetyDisposition, reasonCode) {
@@ -1283,6 +1510,7 @@
     const settings = openAI.readSettings();
     let adultMessagePersisted = false;
     let conversationAttempt = 1;
+    showPendingConversation(text);
     const decisionPacket = engine.buildDecisionPacket(state);
     const contextSelection = openAI.selectRequestContext({
       state,
@@ -1354,7 +1582,11 @@
         result,
         validatedOutput: turn
       });
-      persistAdultMessage(text, turn.safetyDisposition);
+      if (["sensitive_information_warning", "out_of_scope"].includes(turn.safetyDisposition)) {
+        displayAdultMessageWithoutRetention(text, turn.safetyDisposition);
+      } else {
+        persistAdultMessage(text);
+      }
       adultMessagePersisted = true;
       completeApiActivity(result);
       const beforeSubscriptionBaseline = subscriptionFinancialBaseline();
@@ -1501,7 +1733,7 @@
         failApiActivity(error, "canceled");
         return;
       }
-      if (!adultMessagePersisted) persistAdultMessage(text, "unclassified");
+      if (!adultMessagePersisted) persistAdultMessage(text);
       const friendlyError = error.output
         ? "The AI response could not be validated after one automatic retry. Nothing was changed. Please try again."
         : "The selected AI model could not respond. Nothing was changed. Please try again.";
@@ -1517,6 +1749,7 @@
       });
       showToast("AI response unavailable");
     } finally {
+      clearPendingChat();
       responseController = null;
       setChatBusy(false);
       renderAll();
@@ -1597,6 +1830,7 @@
 
   async function generateRecommendation(reason) {
     refreshState();
+    showPendingDecision();
     const decisionPacket = engine.buildDecisionPacket(state);
     const settings = openAI.readSettings();
     const contextSelection = openAI.selectRequestContext({
@@ -1636,6 +1870,8 @@
       });
       failApiActivity(new Error(connectionError), "not_connected");
       transitionWorkflow(workflowEngine.events.FAILED, connectionError);
+      clearPendingChat();
+      renderConversation();
       return { source: "llm_unavailable", error: new Error(connectionError) };
     }
 
@@ -1690,8 +1926,10 @@
       transitionWorkflow(workflowEngine.events.FAILED, error.message);
       return { source: "llm_unavailable", error };
     } finally {
+      clearPendingChat();
       responseController = null;
       setChatBusy(false);
+      renderConversation();
     }
   }
 
@@ -1706,6 +1944,7 @@
   function activateDemoScenario(scenarioId, triggerType) {
     responseController?.abort();
     responseController = null;
+    sessionOnlyChatMessages = [];
     memory.reset({ scenarioId });
     rebaseScenarioDates(math.localDateIso(new Date()));
     refreshState();
@@ -1966,10 +2205,22 @@
   async function handleAdultText(text) {
     const normalized = text.toLowerCase();
     if (global.StreamingGuardMemory.containsSensitiveAccountInformation(text)) {
-      persistAdultMessage(text, "sensitive_information_warning");
+      displayAdultMessageWithoutRetention(text, "sensitive_information_warning");
       recordSafetyDisposition("sensitive_information_warning", "sensitive_information_detected");
       sendChat({
         text: "For your security, I removed that message from saved chat history. Please do not share passwords, payment details, bank information, authentication codes, API keys, or other credentials here. Complete sensitive account activity only through the streaming service’s official interface."
+      });
+      composerIntent = "general";
+      composerMode.textContent = "";
+      messageInput.placeholder = "Ask a question or share more information…";
+      renderAll();
+      return;
+    }
+    if (!isLikelyStreamingScopeMessage(text)) {
+      displayAdultMessageWithoutRetention(text, "out_of_scope");
+      recordSafetyDisposition("out_of_scope", "request_outside_streaming_scope");
+      sendChat({
+        text: "I can help only with household streaming-subscription planning, management, viewing access, and spending. Please ask a question or share an update related to those topics."
       });
       composerIntent = "general";
       composerMode.textContent = "";
@@ -1982,18 +2233,6 @@
       await askOpenAI(text, composerIntent);
       composerIntent = "general";
       setExpectedInputComposer(state.review.nextExpectedInput);
-      return;
-    }
-    if (state.review.manualScenario && !isLikelyStreamingScopeMessage(text)) {
-      persistAdultMessage(text, "out_of_scope");
-      recordSafetyDisposition("out_of_scope", "request_outside_streaming_scope");
-      sendChat({
-        text: "I can help only with household streaming-subscription planning, management, viewing access, and spending. Please ask a question or share an update related to those topics."
-      });
-      composerIntent = "general";
-      composerMode.textContent = "";
-      messageInput.placeholder = "Ask a question or share more information…";
-      renderAll();
       return;
     }
     persistAdultMessage(text);
@@ -2406,6 +2645,10 @@
       }
       if (action === "run-all") {
         await evaluations.runAll(renderEvaluations);
+        return;
+      }
+      if (action === "run-defaults-and-publish") {
+        await runDefaultEvaluationsAndPublish();
       }
     } catch (error) {
       showToast(error.message);
@@ -2472,6 +2715,7 @@
     responseController?.abort();
     responseController = null;
     aiChatDebugLog = [];
+    sessionOnlyChatMessages = [];
     refreshAIChatLogButton();
     memory.reset();
     evaluations.reset();
@@ -2491,6 +2735,7 @@
     responseController?.abort();
     responseController = null;
     aiChatDebugLog = [];
+    sessionOnlyChatMessages = [];
     refreshAIChatLogButton();
     memory.reset({
       scenarioId: global.StreamingGuardScenarioConfig.demoScenarios.backgroundSweep
@@ -2620,6 +2865,21 @@
   });
 
   document.addEventListener("keydown", event => {
+    if (
+      localOperatorMode &&
+      (event.metaKey || event.ctrlKey) &&
+      event.shiftKey &&
+      event.key.toLowerCase() === "e"
+    ) {
+      event.preventDefault();
+      renderEvaluations();
+      showProductView("evaluations");
+      runDefaultEvaluationsAndPublish().catch(error => {
+        showToast(error.message);
+        renderEvaluations();
+      });
+      return;
+    }
     if (event.key !== "Escape") return;
     if (fullScreenEvaluationInstruction) {
       const instructionKey = fullScreenEvaluationInstruction;
@@ -2647,6 +2907,22 @@
     render: renderAll
   });
 
+  function openEvaluationRouteFromHash() {
+    if (global.location.hash !== "#evaluations" && global.location.hash !== "#eval-publish") return;
+    renderEvaluations();
+    showProductView("evaluations");
+    if (global.location.hash !== "#eval-publish") return;
+    refreshLocalOperatorAvailability().then(available => {
+      if (!available || global.location.hash !== "#eval-publish") return;
+      runDefaultEvaluationsAndPublish().catch(error => {
+        showToast(error.message);
+        renderEvaluations();
+      });
+    });
+  }
+
+  global.addEventListener("hashchange", openEvaluationRouteFromHash);
+
   function deliverDailyReminderIfDue() {
     refreshState();
     if (!state.review.dailyReminderEnabled || state.review.externalActionConfirmed) return;
@@ -2664,5 +2940,10 @@
 
   deliverDailyReminderIfDue();
   renderAll();
-  showProductView("chat");
+  if (global.location.hash === "#evaluations" || global.location.hash === "#eval-publish") {
+    openEvaluationRouteFromHash();
+  } else {
+    showProductView("chat");
+    refreshLocalOperatorAvailability();
+  }
 })(window);

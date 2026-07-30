@@ -115,6 +115,8 @@
       "schemaVersion",
       "intent",
       "scope",
+      "searchStrategy",
+      "retrievalSignals",
       "entityIds",
       "requiredRecordTypes",
       "selectedRecordCounts",
@@ -128,6 +130,15 @@
       schemaVersion: { const: CONTEXT_PLAN_SCHEMA_VERSION },
       intent: { type: "string", minLength: 1 },
       scope: { enum: ["scenario", "focused", "subscription_inventory", "household_wide"] },
+      searchStrategy: { const: "hybrid_keyword_semantic" },
+      retrievalSignals: {
+        type: "object",
+        properties: {
+          keywordMatches: { type: "array" },
+          fuzzyMatches: { type: "array" },
+          semanticMatches: { type: "array" }
+        }
+      },
       entityIds: {
         type: "object",
         required: ["services", "titles", "members"],
@@ -246,6 +257,13 @@
     if (!["scenario", "focused", "subscription_inventory", "household_wide"].includes(plan.scope)) {
       throw new RangeError(`Unsupported context scope: ${plan.scope}.`);
     }
+    if (plan.searchStrategy !== "hybrid_keyword_semantic") {
+      throw new RangeError(`Unsupported context search strategy: ${plan.searchStrategy}.`);
+    }
+    assertObject(plan.retrievalSignals, "Context-plan retrievalSignals");
+    ["keywordMatches", "fuzzyMatches", "semanticMatches"].forEach(key =>
+      assertArray(plan.retrievalSignals[key], `retrievalSignals.${key}`)
+    );
     assertObject(plan.entityIds, "Context-plan entityIds");
     ["services", "titles", "members"].forEach(key => assertArray(plan.entityIds[key], `entityIds.${key}`));
     ["requiredRecordTypes", "missingRequirements", "selectionReasons"].forEach(key => assertArray(plan[key], key));

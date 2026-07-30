@@ -8,7 +8,6 @@
     throw new Error("Streaming Guard state, persistence, and workflow dependencies failed to load.");
   }
 
-  const SENSITIVE_MESSAGE_PLACEHOLDER = "[Sensitive information removed from local chat history.]";
   const HOUSEHOLD_DATA_FORMAT = "streaming-guard-household-data";
   const HOUSEHOLD_DATA_VERSION = 1;
 
@@ -169,20 +168,19 @@
           : seed.subscriptionChangeLog,
         messages: Array.isArray(candidate.messages)
           ? candidate.messages
-            .filter(message => !/^Manual (?:scenario mode|chat) is ready\./i.test(message?.text || ""))
+            .filter(message =>
+              !/^Manual (?:scenario mode|chat) is ready\./i.test(message?.text || "") &&
+              !message?.redacted &&
+              !containsSensitiveAccountInformation(message?.text)
+            )
             .map(message => {
               if (typeof message?.text !== "string") return message;
-              const sensitive = containsSensitiveAccountInformation(message.text);
               return {
                 ...message,
-                text: sensitive
-                  ? SENSITIVE_MESSAGE_PLACEHOLDER
-                  : message.text.replace(
-                    /\s+For example, you can ask me to subscribe to [^.]+ now\.$/i,
-                    ""
-                  ),
-                redacted: sensitive || Boolean(message.redacted),
-                redactionReason: sensitive ? "sensitive_information_warning" : message.redactionReason || null
+                text: message.text.replace(
+                  /\s+For example, you can ask me to subscribe to [^.]+ now\.$/i,
+                  ""
+                )
               };
             })
           : [],
@@ -343,7 +341,6 @@
   global.StreamingGuardMemory = Object.freeze({
     createMemoryStore,
     containsSensitiveAccountInformation,
-    sensitiveMessagePlaceholder: SENSITIVE_MESSAGE_PLACEHOLDER,
     householdDataFormat: HOUSEHOLD_DATA_FORMAT,
     householdDataVersion: HOUSEHOLD_DATA_VERSION
   });
