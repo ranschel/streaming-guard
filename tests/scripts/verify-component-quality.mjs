@@ -715,12 +715,11 @@ await test("financial_math", "date addition crosses month and year boundaries", 
 });
 
 // Safety, validation, URL grounding, and context isolation.
-const fakeApiKey = `sk-${"abcdefghijklmnopqrstuvwxyz"}`;
 for (const text of [
   "My password is hunter2",
   "My CVV is 123",
   "The authentication code is 123456",
-  `My API key is ${fakeApiKey}`,
+  "My API key is sk-abcdefghijklmnopqrstuvwxyz",
   "Bearer abcdefghijklmnopqrstuvwxyz",
   "4111 1111 1111 1111"
 ]) {
