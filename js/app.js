@@ -1828,7 +1828,7 @@
     resetApiActivity();
     composerIntent = "general";
     composerMode.textContent = "";
-    messageInput.placeholder = "Ask a question or share more information…";
+    messageInput.placeholder = "Ask or share an update…";
     rebaseScenarioDates(math.localDateIso(new Date()));
     refreshState();
     transact(draft => {
@@ -2036,7 +2036,7 @@
       external_action_confirmation: ["External action confirmation needed", "Please confirm only after you complete the external action…"],
       additional_context: ["Additional context needed", "Please provide the missing or corrected information…"]
     };
-    const [label = "", placeholder = "Ask a question or share more information…"] = states[expectedInput] || [];
+    const [label = "", placeholder = "Ask or share an update…"] = states[expectedInput] || [];
     composerMode.textContent = label;
     messageInput.placeholder = placeholder;
   }
@@ -2083,7 +2083,7 @@
       });
       composerIntent = "general";
       composerMode.textContent = "";
-      messageInput.placeholder = "Ask a question or share more information…";
+      messageInput.placeholder = "Ask or share an update…";
       renderAll();
       return;
     }
@@ -2095,7 +2095,7 @@
       });
       composerIntent = "general";
       composerMode.textContent = "";
-      messageInput.placeholder = "Ask a question or share more information…";
+      messageInput.placeholder = "Ask or share an update…";
       renderAll();
       return;
     }
@@ -2209,7 +2209,7 @@
 
     composerIntent = "general";
     composerMode.textContent = "";
-    messageInput.placeholder = "Ask a question or share more information…";
+    messageInput.placeholder = "Ask or share an update…";
     if (!responseController) renderAll();
   }
 
@@ -2610,7 +2610,7 @@
     rebaseScenarioDates(math.localDateIso(new Date()));
     composerIntent = "general";
     composerMode.textContent = "";
-    messageInput.placeholder = "Ask a question or share more information…";
+    messageInput.placeholder = "Ask or share an update…";
     setChatBusy(false);
     renderAll();
     showProductView("chat");

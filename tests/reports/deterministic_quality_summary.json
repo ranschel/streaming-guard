@@ -1,6 +1,6 @@
 {
-  "startedAt": "2026-07-30T03:37:20.851Z",
-  "completedAt": "2026-07-30T03:37:31.019Z",
+  "startedAt": "2026-07-30T06:55:29.116Z",
+  "completedAt": "2026-07-30T06:55:39.339Z",
   "testType": "streaming_guard_deterministic_quality_gates",
   "targetSuccessRate": 100,
   "passed": true,

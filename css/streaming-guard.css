@@ -3117,23 +3117,35 @@
       .product-navigation-brand span { display: none; }
       .product-navigation-controls { width: 100%; display: grid; grid-template-columns: 1fr; gap: 8px; }
       .product-tabs { width: 100%; overflow-x: auto; }
-      .product-tab { min-width: max-content; flex: 1 0 auto; padding-inline: 10px; font-size: 11px; white-space: nowrap; }
+      .product-tab { min-width: max-content; min-height: 44px; flex: 1 0 auto; padding-inline: 10px; font-size: 11px; white-space: nowrap; }
       .global-ai-status { width: 100%; justify-content: flex-start; }
       .ai-status-content { min-width: 0; flex: 1; }
       .ai-model-role { min-width: 0; flex: 1; }
       .ai-model-role strong { white-space: normal; }
       .app-shell { width: 100%; height: 100%; min-height: 0; margin: 0; display: block; border: 0; border-radius: 0; }
       .sidebar { display: none; }
-      .chat { height: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
-      .whatsapp-appbar { min-height: 44px; }
+      .chat { height: 100%; margin: 0; grid-template-columns: minmax(0, 1fr); border: 0; border-radius: 0; box-shadow: none; }
+      .whatsapp-appbar { min-height: 56px; padding: 6px 12px; gap: 8px; }
+      .whatsapp-brand { min-width: 0; flex: 1 1 auto; }
       .prototype-badge { display: none; }
       .chat-header { min-height: 68px; padding: 12px 16px; }
       .status-pill { display: none; }
-      .whatsapp-appbar-actions { gap: 5px; }
+      .whatsapp-appbar-actions { min-width: 0; flex: 0 0 auto; gap: 4px; }
       .chat-restart-button,
       .chat-download-button,
       .chat-log-button,
-      .chat-fullscreen-toggle { padding-inline: 8px; }
+      .chat-fullscreen-toggle {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+        padding: 0;
+        justify-content: center;
+      }
+      .chat-restart-button strong,
+      .chat-download-button strong,
+      .chat-log-button strong,
+      .chat-fullscreen-toggle strong { display: none; }
       .messages { padding: 18px 14px 28px; }
       .message.user {
         max-width: 85%;
@@ -3164,15 +3176,45 @@
       .eval-run-heading button, .eval-approval-gate button, .eval-case-run { width: 100%; }
       .eval-case-grid { grid-template-columns: 1fr; }
       .eval-manual-grid { grid-template-columns: 1fr; }
-      .eval-toolbar-actions > button { flex: 0 0 auto; }
+      .eval-score-chips {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        overflow: visible;
+      }
+      .eval-score-chips > span {
+        min-width: 0;
+        min-height: 62px;
+        padding: 10px 8px;
+      }
+      .eval-toolbar-actions {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        overflow: visible;
+      }
+      .eval-toolbar-actions > button,
+      .eval-more-menu { width: 100%; min-width: 0; }
+      .eval-toolbar-actions > button,
+      .eval-more-menu > summary { min-height: 44px; }
       .eval-instructions-drawer { width: 100%; }
       .eval-prompt-card summary { padding-right: 190px; }
       .eval-prompt-fullscreen-button { top: 14px; right: 52px; }
       .eval-instruction-fullscreen > header { min-height: 76px; }
       .memory-grid { grid-template-columns: 1fr; }
+      .memory-block,
+      .memory-collapsible-content,
+      .settings-table-wrap,
+      .spending-dashboard,
+      .spending-dashboard > * { min-width: 0; }
+      .settings-table-wrap { width: 100%; max-width: 100%; }
       .context-overview-heading { align-items: flex-start; flex-direction: column; }
       .context-metrics { grid-template-columns: 1fr; }
       .household-summary { grid-template-columns: 1fr; }
+      .spending-dashboard { grid-template-columns: minmax(0, 1fr); }
+      .spending-kpis { grid-template-columns: minmax(0, 1fr); }
       .spending-heading { grid-template-columns: 1fr; align-items: start; }
       .spending-budget { max-width: none; text-align: left; }
       .spending-chart { min-width: 620px; }
@@ -3183,6 +3225,7 @@
       .title-status { justify-content: flex-start; text-align: left; }
       .site-footer { padding: 8px 12px; align-items: flex-start; flex-direction: column; gap: 4px; }
       .site-footer nav { width: 100%; gap: 10px 16px; flex-wrap: wrap; }
+      .site-footer nav a { min-width: 44px; min-height: 44px; padding-inline: 6px; display: inline-flex; align-items: center; justify-content: center; }
       .site-footer-status { flex-wrap: wrap; white-space: normal; }
       .eval-instruction-version { align-items: flex-start; }
       .eval-instruction-version small { white-space: normal; }

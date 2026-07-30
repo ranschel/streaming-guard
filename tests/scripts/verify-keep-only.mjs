@@ -668,6 +668,22 @@ assert(stylesheet.includes(".api-activity-card {"));
 assert(stylesheet.includes("@keyframes progress-reveal"));
 assert(stylesheet.includes("@media (max-height: 760px) and (min-width: 761px)"));
 assert(stylesheet.includes(".evaluations-page .dialog-heading > span,"));
+assert(
+  stylesheet.includes(".chat { height: 100%; margin: 0; grid-template-columns: minmax(0, 1fr);"),
+  "Mobile chat grid does not constrain intrinsic content width"
+);
+assert(
+  stylesheet.includes(".spending-dashboard { grid-template-columns: minmax(0, 1fr);"),
+  "Mobile spending dashboard does not constrain its chart track"
+);
+assert(
+  /\.eval-score-chips\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/.test(stylesheet),
+  "Mobile evaluation score cards do not reflow into two columns"
+);
+assert(
+  /\.chat-fullscreen-toggle\s*\{[\s\S]*?min-width:\s*44px;[\s\S]*?min-height:\s*44px;/.test(stylesheet),
+  "Mobile chat header controls do not meet the 44px touch target"
+);
 assert(applicationSource.includes("function evaluationScrollState(content)"));
 assert(applicationSource.includes("function restoreEvaluationScroll(content, scrollState, activeEvalId)"));
 assert(applicationSource.includes("navigator.scrollTop = scrollState.navigator"));
