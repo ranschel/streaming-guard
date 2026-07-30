@@ -1,0 +1,23 @@
+{
+  "generatedAt": "2026-07-30T17:08:58.164Z",
+  "testType": "feedback_and_regression_loop",
+  "liveModelRequested": false,
+  "liveModelProvider": null,
+  "liveModel": null,
+  "passed": 21,
+  "total": 21,
+  "successRate": 100,
+  "byMode": {
+    "deterministic": {
+      "passed": 15,
+      "total": 15,
+      "successRate": 100
+    },
+    "mocked_model": {
+      "passed": 6,
+      "total": 6,
+      "successRate": 100
+    }
+  },
+  "failures": []
+}

@@ -1,12 +1,17 @@
 {
-  "startedAt": "2026-07-30T06:55:29.116Z",
-  "completedAt": "2026-07-30T06:55:39.339Z",
+  "startedAt": "2026-07-30T17:08:57.905Z",
+  "completedAt": "2026-07-30T17:09:08.381Z",
   "testType": "streaming_guard_deterministic_quality_gates",
   "targetSuccessRate": 100,
   "passed": true,
+  "feedbackRegressionLoop": {
+    "passed": 21,
+    "total": 21,
+    "successRate": 100
+  },
   "componentAssertions": {
-    "passed": 89,
-    "total": 89,
+    "passed": 93,
+    "total": 93,
     "successRate": 100
   },
   "contextRetrieval": {
@@ -17,11 +22,19 @@
   "crossComponentRegressionPassed": true,
   "gates": [
     {
+      "id": "feedback_regression_loop",
+      "label": "Feedback and regression loop",
+      "passed": true,
+      "exitCode": 0,
+      "output": "Feedback and regression loop: 21/21 passed (100%).\n- deterministic: 15/15 (100%)\n- mocked_model: 6/6 (100%)",
+      "error": ""
+    },
+    {
       "id": "component_quality",
       "label": "Deterministic component quality",
       "passed": true,
       "exitCode": 0,
-      "output": "Deterministic component quality: 89/89 passed (100%).\n- memory: 29/29 (100%)\n- financial_math: 22/22 (100%)\n- safety_validation: 27/27 (100%)\n- workflow: 5/5 (100%)\n- provider_ui: 6/6 (100%)",
+      "output": "Deterministic component quality: 93/93 passed (100%).\n- memory: 30/30 (100%)\n- financial_math: 22/22 (100%)\n- safety_validation: 29/29 (100%)\n- workflow: 5/5 (100%)\n- provider_ui: 7/7 (100%)",
       "error": ""
     },
     {

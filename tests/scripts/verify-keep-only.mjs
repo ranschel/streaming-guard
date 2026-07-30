@@ -82,7 +82,7 @@ const instructionSource = fs.readdirSync("instructions")
   "nextExpectedInput",
   "safetyDisposition",
   "reasonCodes",
-  "proposedContextUpdates",
+  "proposedHouseholdUpdates",
   "updateType",
   "targetId",
   "relatedId",
@@ -106,6 +106,11 @@ assert(
 assert(
   !Number.isNaN(Date.parse(knowledge.instructionBundleUpdatedAt)),
   "Instruction bundle update timestamp is missing or invalid"
+);
+assert(
+  knowledge.conversationAddon.includes("## Recommendation Feedback") &&
+  knowledge.conversationAddon.includes("Distinguish feedback about one decision from a durable household preference"),
+  "The generated browser instruction bundle must include the current recommendation-feedback policy."
 );
 assert(indexMarkup.includes('class="site-footer-status"'), "Site footer update status is missing");
 assert(indexMarkup.includes('id="exportHouseholdData"'), "Context household-data export control is missing");
@@ -333,19 +338,74 @@ assert.equal(unknownExecutionContext.householdContext.current_subscriptions.leng
 assert.equal(unknownExecutionContext.servicePlans.length, 0);
 assert.equal(unknownExecutionContext.householdContext.household_watchlist.length, 0);
 
-assert(
-  applicationSource.indexOf("if (!isLikelyStreamingScopeMessage(text))") <
-    applicationSource.indexOf("openAI.isModelConfigured(providerSettings.model, providerSettings)"),
-  "Out-of-scope screening must happen before every configured model call"
+assert(!applicationSource.includes("function isLikelyStreamingScopeMessage"));
+assert(!applicationSource.includes("const budgetMatch = composerIntent"));
+assert(!applicationSource.includes("/(why|reason|evidence|how did you)/"));
+assert(applicationSource.includes("await askOpenAI(text, submittedIntent)"));
+assert(applicationSource.includes("Streaming Guard is currently unavailable. Please try again later."));
+assert(!applicationSource.includes("Connect an AI model before using free-text chat"));
+assert(applicationSource.includes("const disabled = chatBusy || Boolean(block);"));
+const disconnectedFreeTextBranch = applicationSource.slice(
+  applicationSource.indexOf("if (!openAI.isModelConfigured(providerSettings.model, providerSettings))"),
+  applicationSource.indexOf('if (composerIntent === "preference-edit")')
 );
+assert(disconnectedFreeTextBranch.includes("persistAdultMessage(text)"));
+assert(!disconnectedFreeTextBranch.includes("out_of_scope"));
+assert(!disconnectedFreeTextBranch.includes("budgetMatch"));
+assert(
+  applicationSource.indexOf("containsSensitiveAccountInformation(text)") <
+    applicationSource.indexOf("openAI.isModelConfigured(providerSettings.model, providerSettings)"),
+  "Sensitive-data screening must happen before every configured model call"
+);
+assert(applicationSource.includes("function composerChoiceBlock()"));
+assert(applicationSource.includes("function recommendationDecisionPending()"));
+assert(applicationSource.includes('action === "question-preference"'));
 assert(clientSource.includes("message.text && !message.redacted"));
 assert(clientSource.includes("selectedContext.recentConversationLimit"));
 
-assert(clientSource.includes("selectedContext.householdContext"));
+assert(clientSource.includes("audienceSafeGrounding(selectedContext)"));
 assert(clientSource.includes("selectedContext.servicePlans.map"));
 assert(clientSource.includes("selectedContext.catalogTitles.map"));
+assert(clientSource.includes("audienceSafeHistoricalAgentText(message.text)"));
 assert(!applicationSource.includes("function buildContextPolicyTrace"));
 assert(applicationSource.includes("contextSelection?.trace || null"));
+
+const safeGrounding = client.audienceSafeGrounding({
+  householdContext: {
+    current_date: "2026-07-30",
+    trigger_context: { triggerType: "manual" },
+    context_freshness: { subscriptions_confirmed_on: "2026-07-30" },
+    household: { monthlyBudget: 75 },
+    family_members: [{ id: "MEM-001", firstName: "Morgan" }],
+    current_family_rules: { monthlyBudgetCap: 75 },
+    current_subscriptions: [{ serviceId: "SVC-AURORA", service: "Aurora+" }],
+    context_selection: { selected_service_ids: ["SVC-AURORA"] },
+    context_plan: { intent: "subscription_inventory" },
+    source_files: ["household_subscriptions.csv"]
+  }
+});
+const serializedSafeGrounding = JSON.stringify(safeGrounding);
+assert(!serializedSafeGrounding.includes("context_selection"));
+assert(!serializedSafeGrounding.includes("context_plan"));
+assert(!serializedSafeGrounding.includes("source_files"));
+assert(!serializedSafeGrounding.includes("household_subscriptions.csv"));
+assert.throws(
+  () => client.assertAudienceSafeLanguage([
+    "I only have these titles in the current catalog context."
+  ]),
+  /prohibited implementation terminology/
+);
+assert.doesNotThrow(() => client.assertAudienceSafeLanguage([
+  "I can currently verify these titles from the details available to me."
+]));
+assert.equal(
+  client.recentConversation([
+    { role: "assistant", text: "The current catalog context lists two titles." },
+    { role: "user", text: "Why does your context not include another title?" },
+    { role: "assistant", text: "I can verify two titles from the details available to me." }
+  ], 6),
+  "Adult: Why does your context not include another title?\nStreaming Guard: I can verify two titles from the details available to me."
+);
 
 const officialEvalIds = [
   "EVAL-01", "EVAL-02", "EVAL-03", "EVAL-04", "EVAL-05",
@@ -371,6 +431,10 @@ for (const evalId of officialEvalIds) {
     reason: `evaluation_${evalId.toLowerCase()}`
   });
   evalContextPackets.set(evalId, { definition, scenario, state: evalState, decisionPacket: evalDecisionPacket, packet });
+  assert(
+    !/\bcontext\b/i.test(JSON.stringify(client.audienceSafeGrounding(packet))),
+    `${evalId}: adult-facing model information exposed internal wording`
+  );
   const selection = packet.householdContext.context_selection;
   assert(selection.selected_service_ids.includes(scenario.primary_service_id), `${evalId}: primary service omitted`);
   if (scenario.secondary_service_id) {
@@ -479,13 +543,14 @@ assert.equal(
   window.StreamingGuardMemory.containsSensitiveAccountInformation("Cancel Aurora+ before renewal"),
   false
 );
-assert(applicationSource.includes("displayAdultMessageWithoutRetention(text, turn.safetyDisposition)"));
+assert(applicationSource.includes("displayAdultMessageWithoutRetention(visibleText, turn.safetyDisposition)"));
 assert(applicationSource.includes("displayAdultMessageWithoutRetention(text, \"sensitive_information_warning\")"));
-assert(applicationSource.includes("displayAdultMessageWithoutRetention(text, \"out_of_scope\")"));
+assert(!applicationSource.includes("displayAdultMessageWithoutRetention(text, \"out_of_scope\")"));
 assert(applicationSource.includes("sessionOnlyChatMessages"));
-assert(applicationSource.includes("content excluded from persistence, context, logs, and model requests"));
+assert(applicationSource.includes("content excluded from persistence, saved household information, logs, and model requests"));
 assert(!applicationSource.includes("[Out-of-scope message not retained.]"));
 assert(!applicationSource.includes("[Message not retained because it could not be safely classified.]"));
+assert(applicationSource.includes("Every other free-text message is sent to the selected agent model for judgment"));
 assert(applicationSource.includes("containsSensitiveAccountInformation(text)"));
 assert(applicationSource.includes("const safetyOnlyTurn"));
 assert(applicationSource.includes("safetyOnlyTurn"));
@@ -493,7 +558,7 @@ assert(applicationSource.includes("safetyOnlyTurn"));
 assert(!client.recommendationSchema().properties.actionType.enum.includes("wait"));
 assert(!client.conversationResponseSchema().properties.finalAction.enum.includes("wait"));
 const conversationUpdateSchema = client.conversationResponseSchema()
-  .properties.proposedContextUpdates.items;
+  .properties.proposedHouseholdUpdates.items;
 assert(conversationUpdateSchema.properties.updateType.enum.includes("subscription_record"));
 assert(conversationUpdateSchema.properties.updateType.enum.includes("watchlist_item"));
 assert(conversationUpdateSchema.properties.field.enum.includes("subscriptionPlan"));
@@ -634,7 +699,7 @@ assert(!knowledge.coreSystemPrompt.includes("The Glass Garden"));
 assert(!knowledge.coreSystemPrompt.includes("Normal Recommendation Format"));
 assert(!knowledge.coreSystemPrompt.includes("Respond politely using only"));
 assert(!knowledge.immutableEscalationPolicy.includes("streaming_services.csv"));
-assert(knowledge.immutableEscalationPolicy.includes("validated support URL supplied in the runtime context"));
+assert(knowledge.immutableEscalationPolicy.includes("validated support URL supplied with the request"));
 assert.equal(client.DEFAULT_MODEL, "gpt-5.6-terra");
 assert.equal(client.JUDGE_MODEL, "gpt-5.6-luna");
 assert.equal(client.MODEL_OPTIONS.length, 10);
@@ -755,6 +820,9 @@ assert(applicationSource.includes("function recordLiveTraceTool"));
 assert(applicationSource.includes("function updateTraceForLocalMemoryChange"));
 assert(applicationSource.includes("function reconcileTraceWithSavedState"));
 assert(applicationSource.includes("state.review?.externalActionConfirmed"));
+assert(applicationSource.includes('trace.lastMemoryUpdateType !== "external_action_confirmation"'));
+assert(applicationSource.includes('"validate_context_update"'));
+assert(applicationSource.includes("lastMemoryUpdateType: update.updateType"));
 assert(applicationSource.includes("The explicit adult external-action confirmation was validated and saved locally."));
 assert(applicationSource.includes('"validate_structured_response"'));
 assert(applicationSource.includes('"send_chat_response"'));
@@ -1220,6 +1288,7 @@ const refusalFixture = {
   finalAction: "none",
   externalActionRequired: false,
   recommendationEffect: "unchanged",
+  preferenceDisposition: "not_applicable",
   nextExpectedInput: "none",
   safetyDisposition: "execution_refused",
   refusalSections: {
@@ -1229,12 +1298,12 @@ const refusalFixture = {
     whatYouCanDoNext: "Please open the Summit+ account page and complete the subscription yourself, then let me know when the subscription is complete."
   },
   reasonCodes: ["external_action_requested"],
-  proposedContextUpdates: []
+  proposedHouseholdUpdates: []
 };
 
 const liveRefusalFixture = {
   ...refusalFixture,
-  nextExpectedInput: "additional_context",
+  nextExpectedInput: "additional_information",
   refusalSections: {
     yourRequest: "Subscribe to Summit+ now.",
     myResponse: "I can’t complete the subscription.",
@@ -1295,6 +1364,7 @@ const billingEscalationFixture = {
   finalAction: "none",
   externalActionRequired: false,
   recommendationEffect: "unchanged",
+  preferenceDisposition: "not_applicable",
   nextExpectedInput: "none",
   safetyDisposition: "billing_or_legal_escalation",
   refusalSections: {
@@ -1304,7 +1374,7 @@ const billingEscalationFixture = {
     whatYouCanDoNext: ""
   },
   reasonCodes: ["billing_or_legal_issue"],
-  proposedContextUpdates: []
+  proposedHouseholdUpdates: []
 };
 
 const naturalParaphrase = (fixture, scenarioId) => {
@@ -1554,6 +1624,7 @@ const normalizedExternalConfirmation = client.validateConversationResponse({
   finalAction: "cancel",
   externalActionRequired: false,
   recommendationEffect: "close",
+  preferenceDisposition: "not_applicable",
   nextExpectedInput: "none",
   safetyDisposition: "normal",
   refusalSections: {
@@ -1563,7 +1634,7 @@ const normalizedExternalConfirmation = client.validateConversationResponse({
     whatYouCanDoNext: ""
   },
   reasonCodes: ["external_action_confirmed"],
-  proposedContextUpdates: [{
+  proposedHouseholdUpdates: [{
     updateType: "external_action_confirmation",
     targetId: "Aurora+",
     field: "status",
@@ -1573,7 +1644,7 @@ const normalizedExternalConfirmation = client.validateConversationResponse({
     requiresAdultConfirmation: false
   }]
 }, externalConfirmationRecommendation, externalConfirmationPacket);
-assert.equal(JSON.stringify(normalizedExternalConfirmation.proposedContextUpdates), JSON.stringify([{
+assert.equal(JSON.stringify(normalizedExternalConfirmation.proposedHouseholdUpdates), JSON.stringify([{
   updateType: "external_action_confirmation",
   targetId: "SVC-AURORA",
   relatedId: "",
@@ -1594,7 +1665,8 @@ const normalizedRosterClarification = client.validateConversationResponse({
   finalAction: "none",
   externalActionRequired: false,
   recommendationEffect: "unchanged",
-  nextExpectedInput: "additional_context",
+  preferenceDisposition: "not_applicable",
+  nextExpectedInput: "additional_information",
   safetyDisposition: "adult_judgment_required",
   refusalSections: {
     yourRequest: "",
@@ -1603,7 +1675,7 @@ const normalizedRosterClarification = client.validateConversationResponse({
     whatYouCanDoNext: ""
   },
   reasonCodes: ["clarification_needed"],
-  proposedContextUpdates: []
+  proposedHouseholdUpdates: []
 }, null, externalConfirmationPacket, externalConfirmationState);
 assert.equal(normalizedRosterClarification.turnType, "clarification_request");
 
@@ -1618,6 +1690,7 @@ const manualSubscriptionTurn = {
   finalAction: "none",
   externalActionRequired: false,
   recommendationEffect: "unchanged",
+  preferenceDisposition: "not_applicable",
   nextExpectedInput: "subscription_plan",
   safetyDisposition: "normal",
   refusalSections: {
@@ -1627,7 +1700,7 @@ const manualSubscriptionTurn = {
     whatYouCanDoNext: ""
   },
   reasonCodes: ["clarification_needed"],
-  proposedContextUpdates: [{
+  proposedHouseholdUpdates: [{
     updateType: "subscription_record",
     targetId: "SVC-SUMMIT",
     relatedId: "",
@@ -1651,7 +1724,7 @@ const validManualSubscriptionTurn = structuredClone(manualSubscriptionTurn);
 validManualSubscriptionTurn.reply = "Thanks. I saved Summit+ Standard Ad-Free as an active household subscription.";
 validManualSubscriptionTurn.nextExpectedInput = "none";
 validManualSubscriptionTurn.reasonCodes = ["subscription_record_updated"];
-validManualSubscriptionTurn.proposedContextUpdates = [{
+validManualSubscriptionTurn.proposedHouseholdUpdates = [{
   updateType: "subscription_record",
   targetId: "SVC-SUMMIT",
   relatedId: "PLAN-SUMMIT-M",
@@ -1667,7 +1740,7 @@ assert.equal(
     null,
     manualSubscriptionPacket,
     manualSubscriptionState
-  ).proposedContextUpdates[0].relatedId,
+  ).proposedHouseholdUpdates[0].relatedId,
   "PLAN-SUMMIT-M"
 );
 
@@ -1679,7 +1752,8 @@ const frustrationResponse = client.validateConversationResponse({
   finalAction: "none",
   externalActionRequired: false,
   recommendationEffect: "unchanged",
-  nextExpectedInput: "additional_context",
+  preferenceDisposition: "not_applicable",
+  nextExpectedInput: "additional_information",
   safetyDisposition: "normal",
   refusalSections: {
     yourRequest: "",
@@ -1688,7 +1762,7 @@ const frustrationResponse = client.validateConversationResponse({
     whatYouCanDoNext: ""
   },
   reasonCodes: ["general_frustration"],
-  proposedContextUpdates: []
+  proposedHouseholdUpdates: []
 }, externalConfirmationRecommendation, externalConfirmationPacket);
 assert.equal(frustrationResponse.safetyDisposition, "normal");
 assert.equal(frustrationResponse.discussionStatus, "open");

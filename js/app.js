@@ -12,6 +12,7 @@
   const contextSelector = global.StreamingGuardContextSelector;
   const traceFactory = global.StreamingGuardTraceManager;
   const workflowEngine = global.StreamingGuardWorkflow;
+  const feedbackManager = global.StreamingGuardFeedback;
 
   if (![
     context,
@@ -24,7 +25,8 @@
     evaluationFactory,
     contextSelector,
     traceFactory,
-    workflowEngine
+    workflowEngine,
+    feedbackManager
   ].every(Boolean)) {
     throw new Error("Streaming Guard application dependencies failed to load.");
   }
@@ -59,6 +61,7 @@
   let state = memory.getState();
 
   let composerIntent = "general";
+  let chatBusy = false;
 
   const messagesElement = document.getElementById("messages");
   const messageInput = document.getElementById("messageInput");
@@ -106,7 +109,7 @@
       content: `
         <h3>What this prototype does</h3>
         <p>Streaming Guard is an AI product-management capstone prototype that helps an authorized adult review household streaming subscriptions, viewing access, and spending.</p>
-        <p>It demonstrates two guided household subscription stories and a free-form manual scenario in one WhatsApp-style interface. Every path uses the same household context, instructions, safety boundaries, adult discussion, and explicit human control over external actions.</p>
+        <p>It demonstrates two guided household subscription stories and a free-form manual scenario in one WhatsApp-style interface. Every path uses the same saved household information, instructions, safety boundaries, adult discussion, and explicit human control over external actions.</p>
         <h3>What it does not do</h3>
         <p>Streaming Guard is advisory only. It cannot purchase, cancel, pause, pay for, or modify an external streaming account. It is not connected to WhatsApp, Messenger, Netflix, or any fictional streaming service shown in the demo.</p>
         <h3>Prototype data</h3>
@@ -139,9 +142,9 @@
         <p><strong>Last updated: July 28, 2026</strong></p>
         <h3>Data stored in this browser</h3>
         <p>Prototype household context, chat history, recommendation progress, evaluation state, and optional provider settings are stored in this browser using local storage. Streaming Guard does not operate a project database or server that receives this local state.</p>
-        <p>Adult messages remain visible exactly as entered in the current chat. Messages identified as sensitive or clearly outside Streaming Guard’s scope are displayed only for the current browser session: their content is not added to persistent chat history, household context, AI request logs, or model requests. Previously saved messages containing recognizable credentials are removed when local state is loaded.</p>
+        <p>Adult messages remain visible exactly as entered in the current chat. Sensitive information is detected before a model request and is not added to persistent chat history, saved household information, AI request logs, or model requests. Every other free-text message is sent to the selected agent model for judgment, including a message that may be outside Streaming Guard’s scope. If the model classifies a message as out of scope, it remains visible for the current browser session but is not added to saved household information. Previously saved messages containing recognizable credentials are removed when local state is loaded.</p>
         <h3>AI-provider connections</h3>
-        <p>If you connect OpenAI, Anthropic, or Google Gemini and request a recommendation or chat response, the relevant system instructions, fictional household context, calculations, recent conversation, and your message are sent directly from this browser to the provider selected for the agent. Evaluation cases are sent only after you explicitly approve the instruction bundle and run a case. Each evaluation output is then sent to the separately selected judge provider with its fixed case and expected behavior for independent semantic assessment.</p>
+        <p>If you connect OpenAI, Anthropic, or Google Gemini and request a recommendation or chat response, the relevant system instructions, fictional household information, calculations, recent conversation, and your message are sent directly from this browser to the provider selected for the agent. Evaluation cases are sent only after you explicitly approve the instruction bundle and run a case. Each evaluation output is then sent to the separately selected judge provider with its fixed case and expected behavior for independent semantic assessment.</p>
         <p>The API key is stored in this browser’s local storage for this private prototype. A publicly deployed version should use a secure server-side connection instead.</p>
         <h3>Your controls</h3>
         <ul>
@@ -279,6 +282,13 @@
     return null;
   }
 
+  function newRecommendationInstanceId(responseId = null) {
+    if (responseId) return `response-${responseId}`;
+    const random = global.crypto?.randomUUID?.() ||
+      `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return `recommendation-${random}`;
+  }
+
   function showToast(text) {
     const toast = document.getElementById("toast");
     toast.textContent = text;
@@ -304,6 +314,81 @@
     link.remove();
     global.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
     showToast("Household data exported as JSON");
+  }
+
+  function downloadJson(payload, filename) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8"
+    });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    global.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  }
+
+  function captureRecommendationRegression(feedback) {
+    const recommendation = currentRecommendation();
+    return feedbackManager.captureRegressionCandidate({
+      sourceType: "recommendation_feedback",
+      sourceKey: feedback.id,
+      title: `Poor recommendation feedback · ${state.scenario.targetServiceName || state.scenario.id}`,
+      failureSummary: [...feedback.reasons, feedback.comment].filter(Boolean).join("; "),
+      expectedBehaviorDraft: "Revise the expected behavior after reviewing the adult’s feedback. Preserve advisory-only authority and require explicit approval for any lasting preference.",
+      fixedInput: {
+        scenario: state.scenario,
+        householdRevision: state.householdRevision,
+        recommendationVersion: state.review.recommendationVersion
+      },
+      actualOutput: recommendation,
+      validationEvidence: {
+        adultRating: feedback.rating,
+        reasons: feedback.reasons,
+        comment: feedback.comment
+      },
+      metadata: {
+        recommendationModel: state.review.recommendationModel,
+        recommendationResponseId: state.review.recommendationResponseId
+      }
+    });
+  }
+
+  function captureEvaluationRegression(evalId) {
+    const item = evaluations.model().cases.find(candidate => candidate.eval_id === evalId);
+    if (!item?.result || !["fail", "error"].includes(item.result.verdict)) {
+      throw new Error("Only a failed or errored evaluation can become a regression draft.");
+    }
+    return feedbackManager.captureRegressionCandidate({
+      sourceType: "evaluation_failure",
+      sourceKey: `${item.eval_id}:${item.result.completedAt || item.result.promptHash || "current"}`,
+      title: `${item.eval_id} · ${item.case_name}`,
+      failureSummary: item.result.error || item.result.criteria
+        ?.filter(check => !check.passed)
+        .map(check => `${check.label}: ${check.detail}`)
+        .join("; "),
+      expectedBehaviorDraft: item.expected_behavior,
+      fixedInput: {
+        inputSummary: item.input_summary,
+        userInput: item.user_input,
+        humanReadableInput: item.humanReadableInput
+      },
+      actualOutput: item.result.output,
+      validationEvidence: {
+        verdict: item.result.verdict,
+        criteria: item.result.criteria,
+        judgment: item.result.judgment,
+        error: item.result.error
+      },
+      metadata: {
+        promptHash: item.result.promptHash,
+        responseModel: item.result.model,
+        judgeModel: item.result.judgeModel,
+        completedAt: item.result.completedAt
+      }
+    });
   }
 
   async function importHouseholdData(file) {
@@ -563,6 +648,14 @@
 
   function reconcileTraceWithSavedState(trace) {
     if (!trace || !state.review?.externalActionConfirmed) return trace;
+    // A previously confirmed external action is part of household state, but it
+    // must never overwrite the trace for a newer, different memory write.
+    if (
+      trace.lastMemoryUpdateType &&
+      trace.lastMemoryUpdateType !== "external_action_confirmation"
+    ) {
+      return trace;
+    }
     const serviceId = state.scenario?.targetServiceId;
     const subscription = state.subscriptions.find(item => item.serviceId === serviceId);
     if (!subscription) return trace;
@@ -684,6 +777,9 @@
       };
       return `the household ${ruleNames[update.field] || update.field} as ${displayedValue}`;
     }
+    if (update.updateType === "preference_note") {
+      return `the household preference “${displayedValue}”`;
+    }
     if (update.updateType === "subscription_record") {
       const subscription = state.subscriptions.find(item => item.serviceId === update.targetId);
       const fieldNames = {
@@ -723,8 +819,8 @@
   function completedMemoryOutcome({ turn, updateResult, recommendation }) {
     if (turn && ["sensitive_information_warning", "out_of_scope"].includes(turn.safetyDisposition)) {
       return turn.safetyDisposition === "out_of_scope"
-        ? "Out-of-scope content excluded from persistent household context."
-        : "Sensitive content redacted; household context unchanged.";
+        ? "Out-of-scope content excluded from saved household information."
+        : "Sensitive content redacted; saved household information unchanged.";
     }
     if (updateResult?.applied?.length) {
       const descriptions = updateResult.applied.map(describeMemoryUpdate);
@@ -746,16 +842,22 @@
     const currentTrace = liveApiActivity.trace;
     if (!currentTrace || !update) return;
     const description = describeMemoryUpdate(update);
+    const validatedTools = appendTraceTool(
+      currentTrace.tools,
+      "validate_context_update",
+      validationOutcome
+    );
     updateApiActivity({
       trace: {
         ...currentTrace,
         tools: appendTraceTool(
-          currentTrace.tools,
+          validatedTools,
           "update_household_context",
           `Saved ${description}`
         ),
         memoryOutcome: `Saved ${description}.`,
-        validationOutcome
+        validationOutcome,
+        lastMemoryUpdateType: update.updateType
       }
     });
   }
@@ -794,7 +896,8 @@
         ...currentTrace,
         tools: traceTools,
         memoryOutcome: completedMemoryOutcome({ turn, updateResult, recommendation }),
-        validationOutcome: "Structured response received, grounded, and validated."
+        validationOutcome: "Structured response received, grounded, and validated.",
+        lastMemoryUpdateType: updateResult?.applied?.at(-1)?.updateType || null
       }
     });
     traceManager.span(
@@ -921,6 +1024,27 @@
       messagesElement.innerHTML = ui.welcomeMarkup();
     } else {
       const lastControlIndex = state.messages.findLastIndex(message => ["choices", "confirmation"].includes(message.kind));
+      const conversationLabel = state.review.manualScenario
+        ? "Manual scenario"
+        : state.review.started
+          ? "Subscription review"
+          : "Household information update";
+      const feedbackEligible = recommendation && [
+        "discussion_resolved",
+        "completed"
+      ].includes(state.review.status);
+      const savedFeedback = feedbackEligible ? feedbackManager.feedbackFor({
+        scenarioId: state.scenario.id,
+        recommendationVersion: state.review.recommendationVersion,
+        recommendationInstanceId: recommendation.instanceId
+      }) : null;
+      const feedback = feedbackEligible
+        ? ui.feedbackMarkup({ submitted: Boolean(savedFeedback) })
+        : "";
+      const feedbackInsertAt = savedFeedback
+        ? Math.max(0, Number(savedFeedback.displayAfterMessageCount || 0))
+        : null;
+      let feedbackRendered = false;
       const transcript = [];
       for (let index = 0; index <= state.messages.length; index += 1) {
         sessionOnlyChatMessages
@@ -933,6 +1057,14 @@
               activeControl: false
             }));
           });
+        if (
+          !feedbackRendered &&
+          savedFeedback &&
+          feedbackInsertAt === index
+        ) {
+          transcript.push(feedback);
+          feedbackRendered = true;
+        }
         if (index < state.messages.length) {
           transcript.push(ui.messageMarkup(state.messages[index], {
             state,
@@ -942,20 +1074,37 @@
           }));
         }
       }
-      const pendingMessages = pendingChatMessages.map(message => ui.messageMarkup(message, {
-        state,
-        recommendation,
-        accountUrl: targetAccountUrl(),
-        activeControl: false
-      })).join("");
-      const conversationLabel = state.review.manualScenario
-        ? "Manual scenario"
-        : state.review.started
-          ? "Subscription review"
-          : "Household context update";
-      messagesElement.innerHTML = `<div class="day-marker">${conversationLabel} · ${ui.escapeHtml(engine.displayDate(state.systemDate, state.household.locale))}</div>${transcript.join("")}${pendingMessages}`;
+      const pendingTranscript = [];
+      pendingChatMessages.forEach((message, pendingIndex) => {
+        pendingTranscript.push(ui.messageMarkup(message, {
+          state,
+          recommendation,
+          accountUrl: targetAccountUrl(),
+          activeControl: false
+        }));
+        const virtualIndex = state.messages.length + pendingIndex + 1;
+        if (
+          !feedbackRendered &&
+          savedFeedback &&
+          feedbackInsertAt === virtualIndex
+        ) {
+          pendingTranscript.push(feedback);
+          feedbackRendered = true;
+        }
+      });
+      if (savedFeedback && !feedbackRendered) {
+        pendingTranscript.push(feedback);
+        feedbackRendered = true;
+      }
+      const feedbackAtEnd = feedbackEligible && !savedFeedback ? feedback : "";
+      const pendingPreference = pendingPreferenceUpdate();
+      const preferenceApproval = pendingPreference && composerIntent !== "preference-edit"
+        ? ui.preferenceApprovalMarkup(pendingPreference)
+        : "";
+      messagesElement.innerHTML = `<div class="day-marker">${conversationLabel} · ${ui.escapeHtml(engine.displayDate(state.systemDate, state.household.locale))}</div>${transcript.join("")}${pendingTranscript.join("")}${feedbackAtEnd}${preferenceApproval}`;
     }
     renderDetails(recommendation);
+    syncComposerAvailability();
     global.requestAnimationFrame(() => {
       const maximumScrollTop = Math.max(0, messagesElement.scrollHeight - messagesElement.clientHeight);
       messagesElement.scrollTop = Math.min(preservedScrollTop, maximumScrollTop);
@@ -1045,11 +1194,20 @@
       selectedEvaluationId = model.cases.find(item => ["fail", "error"].includes(item.result?.verdict))?.eval_id
         || model.cases[0]?.eval_id;
     }
+    const selectedCase = model.cases.find(item => item.eval_id === selectedEvaluationId);
+    const selectedRegressionKey = selectedCase?.result
+      ? `${selectedCase.eval_id}:${selectedCase.result.completedAt || selectedCase.result.promptHash || "current"}`
+      : "";
     content.innerHTML = ui.evaluationMarkup({
       ...model,
       selectedEvalId: selectedEvaluationId,
       instructionsOpen: evaluationInstructionsOpen,
-      fullScreenInstructionKey: fullScreenEvaluationInstruction
+      fullScreenInstructionKey: fullScreenEvaluationInstruction,
+      regressionCandidateCount: feedbackManager.regressionCandidates().length,
+      selectedRegressionCaptured: feedbackManager.hasRegressionCandidate(
+        "evaluation_failure",
+        selectedRegressionKey
+      )
     });
     restoreEvaluationScroll(content, scrollState, selectedEvaluationId);
   }
@@ -1091,8 +1249,8 @@
   }
 
   function setChatBusy(busy) {
-    messageInput.disabled = busy;
-    document.querySelector(".send-button").disabled = busy;
+    chatBusy = busy;
+    syncComposerAvailability();
     document.querySelectorAll('[data-action="run-check"], [data-action="run-background-sweep"], [data-action="review-subscription-request"], [data-action="start-manual-scenario"]').forEach(button => {
       button.disabled = busy;
     });
@@ -1102,6 +1260,65 @@
       renderAIStatus();
     }
     document.getElementById("openAISettings").classList.toggle("thinking", busy);
+  }
+
+  function agentModelConfigured() {
+    const settings = openAI.readSettings();
+    return openAI.isModelConfigured(settings.model, settings);
+  }
+
+  function recommendationDecisionPending() {
+    const recommendation = currentRecommendation();
+    const discussionOpen = !state.review.discussionStatus || state.review.discussionStatus === "open";
+    const safetyAllowsDecision = !state.review.safetyDisposition ||
+      ["normal", "adult_judgment_required"].includes(state.review.safetyDisposition);
+    return Boolean(
+      recommendation &&
+      discussionOpen &&
+      safetyAllowsDecision &&
+      !["waiting_for_external_action", "completed", "discussion_resolved"].includes(state.review.status)
+    );
+  }
+
+  function composerChoiceBlock() {
+    if (
+      pendingPreferenceUpdate() &&
+      !["preference-edit", "preference-question"].includes(composerIntent)
+    ) {
+      return {
+        label: "Preference choice required",
+        placeholder: "Choose Save preference, Don’t save, Edit, or Ask a question above."
+      };
+    }
+    if (
+      recommendationDecisionPending() &&
+      !["disagree", "question"].includes(composerIntent)
+    ) {
+      return {
+        label: "Recommendation choice required",
+        placeholder: "Choose I agree, disagree or add information, or Ask a question above."
+      };
+    }
+    return null;
+  }
+
+  function syncComposerAvailability() {
+    const block = composerChoiceBlock();
+    const connected = agentModelConfigured();
+    const disabled = chatBusy || Boolean(block);
+    messageInput.disabled = disabled;
+    document.querySelector(".send-button").disabled = disabled;
+    document.querySelector(".composer-wrap").classList.toggle("choice-blocked", Boolean(block));
+    document.querySelector(".composer-wrap").classList.toggle("model-disconnected", !connected);
+    if (chatBusy) return;
+    if (block) {
+      composerMode.textContent = block.label;
+      messageInput.placeholder = block.placeholder;
+      return;
+    }
+    if (composerMode.textContent === "AI model connection required") {
+      setExpectedInputComposer(state.review.nextExpectedInput);
+    }
   }
 
   function chatMessageTime() {
@@ -1185,6 +1402,19 @@
         payload: { rule: update.field, value },
         source: "adult_chat",
         scope
+      });
+      return { externalActionConfirmed: false };
+    }
+
+    if (update.updateType === "preference_note") {
+      if (update.field !== "preferenceNote" || update.scope !== "permanent") {
+        throw new Error("A lasting preference must be an explicitly approved permanent preference note.");
+      }
+      tools.update_household_context({
+        updateType: "preference_note",
+        payload: { preference: update.value },
+        source: "adult_feedback_approved",
+        scope: "permanent"
       });
       return { externalActionConfirmed: false };
     }
@@ -1305,7 +1535,7 @@
       rejected: [],
       externalActionConfirmed: false
     };
-    turn.proposedContextUpdates.forEach(update => {
+    turn.proposedHouseholdUpdates.forEach(update => {
       if (update.requiresAdultConfirmation) {
         result.pending.push(update);
         return;
@@ -1320,6 +1550,102 @@
       }
     });
     return result;
+  }
+
+  function pendingPreferenceUpdate() {
+    return (state.review.pendingContextUpdates || []).find(update =>
+      feedbackManager.isPendingPreference(update)
+    ) || null;
+  }
+
+  function savePendingPreference() {
+    const pending = pendingPreferenceUpdate();
+    if (!pending) {
+      showToast("There is no pending preference to save");
+      return;
+    }
+    const approved = feedbackManager.preferenceDecision(
+      pending,
+      feedbackManager.PREFERENCE_DECISIONS.SAVE
+    );
+    try {
+      applyContextUpdateProposal(approved, {
+        outcome: "none",
+        finalAction: "none"
+      });
+      refreshState();
+      transact(draft => {
+        draft.review.pendingContextUpdates = [];
+        draft.review.nextExpectedInput = "none";
+        draft.review.lastTurnType = "new_information";
+        draft.review.reasonCodes = ["family_rule_updated"];
+      });
+      sendChat({ role: "user", text: "Save preference" });
+      sendChat({ text: `Saved for future recommendations: “${approved.value}”` });
+      updateTraceForLocalMemoryChange(
+        approved,
+        "The adult explicitly approved the displayed preference and the application saved it."
+      );
+      showToast("Household preference saved");
+      composerIntent = "general";
+      setExpectedInputComposer("none");
+      renderAll();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  function rejectPendingPreference() {
+    const pending = pendingPreferenceUpdate();
+    if (!pending) {
+      showToast("There is no pending preference to reject");
+      return;
+    }
+    feedbackManager.preferenceDecision(
+      pending,
+      feedbackManager.PREFERENCE_DECISIONS.REJECT
+    );
+    transact(draft => {
+      draft.review.pendingContextUpdates = [];
+      draft.review.nextExpectedInput = "none";
+      draft.review.lastTurnType = "new_information";
+      draft.review.reasonCodes = ["no_material_change"];
+    });
+    sendChat({ role: "user", text: "Don’t save" });
+    sendChat({ text: "Understood. I did not add that preference to household memory." });
+    composerIntent = "general";
+    setExpectedInputComposer("none");
+    renderAll();
+  }
+
+  function editPendingPreference() {
+    const pending = pendingPreferenceUpdate();
+    if (!pending) {
+      showToast("There is no pending preference to edit");
+      return;
+    }
+    feedbackManager.preferenceDecision(
+      pending,
+      feedbackManager.PREFERENCE_DECISIONS.EDIT
+    );
+    composerIntent = "preference-edit";
+    composerMode.textContent = "Edit proposed preference";
+    messageInput.placeholder = "What should the proposed preference say instead?";
+    syncComposerAvailability();
+    messageInput.focus();
+  }
+
+  function questionPendingPreference() {
+    const pending = pendingPreferenceUpdate();
+    if (!pending) {
+      showToast("There is no pending preference to ask about");
+      return;
+    }
+    composerIntent = "preference-question";
+    composerMode.textContent = "Ask about the proposed preference";
+    messageInput.placeholder = "What would you like to understand before deciding?";
+    syncComposerAvailability();
+    messageInput.focus();
   }
 
   function persistAdultMessage(text) {
@@ -1343,28 +1669,10 @@
     sessionOnlyChatMessages.push(message);
     recordLiveTraceTool(
       "display_session_only_message",
-      "Adult message displayed verbatim for this browser session; content excluded from persistence, context, logs, and model requests."
+      "Adult message displayed verbatim for this browser session; content excluded from persistence, saved household information, logs, and model requests."
     );
     renderConversation();
     return message;
-  }
-
-  function isLikelyStreamingScopeMessage(text) {
-    const message = String(text || "");
-    const activePlanningFollowUp = Boolean(currentRecommendation()) && (
-      /\b(?:agree|disagree|approve|reject|override|revisit|not yet|tell me more|why|what if|i did it|i completed it|it is done)\b/i
-        .test(message) ||
-      (
-        state.review.nextExpectedInput &&
-        state.review.nextExpectedInput !== "none" &&
-        /^(?:yes|no|okay|ok|correct|finished|completed|done)\b/i.test(message.trim())
-      )
-    );
-    return activePlanningFollowUp || contextSelector.isLikelyStreamingRequest({
-      message,
-      state,
-      knowledge: context.knowledge
-    });
   }
 
   function recordSafetyDisposition(safetyDisposition, reasonCode) {
@@ -1377,18 +1685,21 @@
     });
   }
 
-  async function askOpenAI(text, intent) {
+  async function askOpenAI(text, intent, {
+    visibleText = text,
+    contextText = visibleText
+  } = {}) {
     const settings = openAI.readSettings();
     let adultMessagePersisted = false;
     let conversationAttempt = 1;
-    showPendingConversation(text);
+    showPendingConversation(visibleText);
     const decisionPacket = engine.buildDecisionPacket(state);
     const contextSelection = openAI.selectRequestContext({
       state,
       knowledge: context.knowledge,
       decisionPacket,
       recommendation: currentRecommendation(),
-      userText: text,
+      userText: contextText,
       requestType: "conversation"
     });
     beginApiActivity({
@@ -1454,19 +1765,23 @@
         validatedOutput: turn
       });
       if (["sensitive_information_warning", "out_of_scope"].includes(turn.safetyDisposition)) {
-        displayAdultMessageWithoutRetention(text, turn.safetyDisposition);
+        displayAdultMessageWithoutRetention(visibleText, turn.safetyDisposition);
       } else {
-        persistAdultMessage(text);
+        persistAdultMessage(visibleText);
       }
       adultMessagePersisted = true;
       completeApiActivity(result);
       const beforeSubscriptionBaseline = subscriptionFinancialBaseline();
+      const pendingPreferenceBeforeTurn = pendingPreferenceUpdate();
+      const preferenceWorkflowIntent = ["feedback", "preference_edit", "preference_question"].includes(intent);
       const safetyOnlyTurn = ["sensitive_information_warning", "out_of_scope"]
         .includes(turn.safetyDisposition);
-      const updateResult = safetyOnlyTurn
+      const updateResult = safetyOnlyTurn || intent === "preference_question"
         ? {
             applied: [],
-            pending: [],
+            pending: intent === "preference_question" && pendingPreferenceBeforeTurn
+              ? [pendingPreferenceBeforeTurn]
+              : [],
             rejected: [],
             externalActionConfirmed: false
           }
@@ -1479,14 +1794,23 @@
       transact(draft => {
         draft.review.lastTurnType = turn.turnType;
         draft.review.recommendationEffect = turn.recommendationEffect;
-        draft.review.nextExpectedInput = turn.nextExpectedInput;
+        draft.review.nextExpectedInput = (
+          preferenceWorkflowIntent &&
+          updateResult.pending.some(update => update.updateType === "preference_note")
+        )
+          ? "none"
+          : turn.nextExpectedInput;
         draft.review.safetyDisposition = turn.safetyDisposition;
         draft.review.reasonCodes = [...turn.reasonCodes];
         draft.review.pendingContextUpdates = [...updateResult.pending, ...updateResult.rejected.map(item => ({
           ...item.update,
           requiresAdultConfirmation: true
         }))];
-        if (
+        if (preferenceWorkflowIntent) {
+          // Preference feedback, editing, and questions must not reopen or
+          // replace the resolved recommendation. The pending proposal remains
+          // under explicit adult control.
+        } else if (
           turn.outcome === "external_action_confirmed" &&
           !updateResult.externalActionConfirmed
         ) {
@@ -1536,7 +1860,10 @@
           }
         }
       });
-      if (turn.safetyDisposition === "execution_refused") {
+      if (preferenceWorkflowIntent) {
+        // The completed recommendation workflow remains complete while the
+        // adult decides whether to save a proposed lasting preference.
+      } else if (turn.safetyDisposition === "execution_refused") {
         transitionWorkflow(workflowEngine.events.EXECUTION_REFUSED, "The advisory execution boundary was enforced.");
       } else if (updateResult.externalActionConfirmed) {
         transitionWorkflow(workflowEngine.events.DISCUSSION_OPENED, "Validated output returned to the adult.");
@@ -1555,7 +1882,7 @@
       }
       updateCompletedTrace({ turn, updateResult });
       const replyText = updateResult.rejected.length
-        ? `${turn.reply} I understood the requested update, but I could not validate it against the stored household context, so I did not save it.`
+        ? `${turn.reply} I understood the requested update, but I could not validate it against the saved household information, so I did not save it.`
         : turn.reply;
       sendChat(turn.safetyDisposition === "execution_refused"
         ? {
@@ -1585,9 +1912,9 @@
         await replaceRecommendationMessages("relevant_chat_information_added");
       } else if (updateResult.applied.length) {
         showToast("Household details updated");
-      } else if (turn.discussionStatus === "external_action_pending") {
+      } else if (!preferenceWorkflowIntent && turn.discussionStatus === "external_action_pending") {
         sendChat({ kind: "confirmation" });
-      } else if (turn.discussionStatus === "open") {
+      } else if (!preferenceWorkflowIntent && turn.discussionStatus === "open") {
         sendChat({ kind: "choices" });
       }
     } catch (error) {
@@ -1604,7 +1931,7 @@
         failApiActivity(error, "canceled");
         return;
       }
-      if (!adultMessagePersisted) persistAdultMessage(text);
+      if (!adultMessagePersisted) persistAdultMessage(visibleText);
       const friendlyError = error.output
         ? "The AI response could not be validated after one automatic retry. Nothing was changed. Please try again."
         : "The selected AI model could not respond. Nothing was changed. Please try again.";
@@ -1668,7 +1995,8 @@
     transact(draft => {
       draft.review.generatedRecommendation = {
         ...recommendation,
-        version: draft.review.recommendationVersion
+        version: draft.review.recommendationVersion,
+        instanceId: newRecommendationInstanceId(responseId)
       };
       draft.review.progressStage = "recommendation_ready";
       draft.review.status = recommendation.route;
@@ -1678,7 +2006,7 @@
       draft.review.resolvedAt = null;
       draft.review.lastTurnType = null;
       draft.review.recommendationEffect = "unchanged";
-      draft.review.nextExpectedInput = recommendation.status === "Adult judgment required" ? "additional_context" : "adult_decision";
+      draft.review.nextExpectedInput = recommendation.status === "Adult judgment required" ? "additional_information" : "adult_decision";
       draft.review.safetyDisposition = recommendation.status === "Adult judgment required" ? "adult_judgment_required" : "normal";
       draft.review.reasonCodes = [];
       draft.review.pendingContextUpdates = [];
@@ -1750,18 +2078,43 @@
     responseController = new AbortController();
     setChatBusy(true);
     try {
-      const responsePromise = openAI.createRecommendation({
-        state,
-        decisionPacket,
-        knowledge: context.knowledge,
-        reason,
-        contextSelection,
-        signal: responseController.signal
-      });
+      let recommendationAttempt = 1;
+      const requestRecommendation = validationFeedback => openAI.createRecommendation({
+          state,
+          decisionPacket,
+          knowledge: context.knowledge,
+          reason,
+          contextSelection,
+          validationFeedback,
+          signal: responseController.signal
+        });
+      let responsePromise = requestRecommendation("");
       markApiWaiting();
-      const result = await responsePromise;
+      let result;
+      try {
+        result = await responsePromise;
+      } catch (firstError) {
+        if (!firstError.output || firstError.name === "AbortError") throw firstError;
+        recordAIChatDebugCall({
+          requestType: "recommendation",
+          attempt: recommendationAttempt,
+          error: firstError,
+          validatedOutput: firstError.output,
+          validationStatus: "rejected_by_application_validator"
+        });
+        updateApiActivity({
+          inputSummary: [
+            ...liveApiActivity.inputSummary,
+            "The first structured response failed validation; one corrected response was requested automatically"
+          ]
+        });
+        recommendationAttempt += 1;
+        responsePromise = requestRecommendation(firstError.message);
+        result = await responsePromise;
+      }
       recordAIChatDebugCall({
         requestType: "recommendation",
+        attempt: recommendationAttempt,
         result,
         validatedOutput: result.recommendation
       });
@@ -1953,7 +2306,7 @@
       draft.review.discussionStatus = "open";
       draft.review.lastTurnType = null;
       draft.review.recommendationEffect = "unchanged";
-      draft.review.nextExpectedInput = "additional_context";
+      draft.review.nextExpectedInput = "additional_information";
       draft.review.safetyDisposition = "normal";
       draft.review.reasonCodes = [];
       draft.review.pendingContextUpdates = [];
@@ -2018,9 +2371,10 @@
       composerMode.textContent = "Ask about this recommendation";
       messageInput.placeholder = "What would you like to know?";
     } else if (intent === "context-update") {
-      composerMode.innerHTML = `<span>Update stored household context</span><button class="composer-run-check" type="button" data-action="run-check">Run daily background sweep without changes</button>`;
+      composerMode.innerHTML = `<span>Update saved household information</span><button class="composer-run-check" type="button" data-action="run-check">Run daily background sweep without changes</button>`;
       messageInput.placeholder = "Tell me which person, title, subscription, budget, or family rule changed…";
     }
+    syncComposerAvailability();
     messageInput.focus();
   }
 
@@ -2034,7 +2388,7 @@
       subscription_plan: ["Subscription plan needed", "Which exact service plan did you add or change to?"],
       budget_amount: ["Budget decision needed", "Keep the current budget, match the new monthly spending, or enter a higher amount…"],
       external_action_confirmation: ["External action confirmation needed", "Please confirm only after you complete the external action…"],
-      additional_context: ["Additional context needed", "Please provide the missing or corrected information…"]
+      additional_information: ["Additional information needed", "Please provide the missing or corrected information…"]
     };
     const [label = "", placeholder = "Ask or share an update…"] = states[expectedInput] || [];
     composerMode.textContent = label;
@@ -2067,14 +2421,7 @@
     sendChat({ kind: "choices" });
   }
 
-  function mentionedViewer(normalizedText) {
-    return state.scenario.intendedViewerIds
-      .map(memberId => state.members.find(member => member.id === memberId))
-      .find(member => member && normalizedText.includes(member.firstName.toLowerCase()));
-  }
-
   async function handleAdultText(text) {
-    const normalized = text.toLowerCase();
     if (global.StreamingGuardMemory.containsSensitiveAccountInformation(text)) {
       displayAdultMessageWithoutRetention(text, "sensitive_information_warning");
       recordSafetyDisposition("sensitive_information_warning", "sensitive_information_detected");
@@ -2087,130 +2434,90 @@
       renderAll();
       return;
     }
-    if (!isLikelyStreamingScopeMessage(text)) {
-      displayAdultMessageWithoutRetention(text, "out_of_scope");
-      recordSafetyDisposition("out_of_scope", "request_outside_streaming_scope");
+
+    const providerSettings = openAI.readSettings();
+    if (!openAI.isModelConfigured(providerSettings.model, providerSettings)) {
+      persistAdultMessage(text);
       sendChat({
-        text: "I can help only with household streaming-subscription planning, management, viewing access, and spending. Please ask a question or share an update related to those topics."
+        text: "Streaming Guard is currently unavailable. Please try again later."
       });
       composerIntent = "general";
-      composerMode.textContent = "";
-      messageInput.placeholder = "Ask or share an update…";
+      setExpectedInputComposer(state.review.nextExpectedInput);
       renderAll();
       return;
     }
-    const providerSettings = openAI.readSettings();
-    if (openAI.isModelConfigured(providerSettings.model, providerSettings)) {
-      await askOpenAI(text, composerIntent);
+
+    if (composerIntent === "preference-edit") {
+      const pending = pendingPreferenceUpdate();
+      if (!pending) {
+        composerIntent = "general";
+        setExpectedInputComposer("none");
+        showToast("The pending preference is no longer available");
+        return;
+      }
+      const editRequest = feedbackManager.preferenceEditRequest(pending, text);
+      await askOpenAI(
+        editRequest.modelText,
+        "preference_edit",
+        {
+          visibleText: editRequest.visibleText,
+          contextText: editRequest.contextText
+        }
+      );
       composerIntent = "general";
       setExpectedInputComposer(state.review.nextExpectedInput);
+      syncComposerAvailability();
       return;
     }
-    persistAdultMessage(text);
-    const viewer = mentionedViewer(normalized);
-    const language = scenarioLanguage();
-    const budgetMatch = composerIntent === "context-update"
-      ? normalized.match(/(?:monthly\s+)?budget(?:\s+(?:is|to|should be|changed to))?\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/)
-      : null;
 
-    if (viewer && /(not finished|hasn't finished|has not finished|still watching|didn't finish)/.test(normalized)) {
-      tools.update_household_context({
-        updateType: "viewing_confirmation",
-        payload: { memberId: viewer.id, titleId: state.scenario.titleId, status: "watching" },
-        source: "adult_chat"
-      });
-      transact(draft => {
-        draft.review.status = "adult_judgment_required";
-        draft.review.adultDecision = "Added viewing information";
-        draft.review.recommendationVersion += 1;
-      });
-      updateTraceForLocalMemoryChange({
-        updateType: "viewing_confirmation",
-        targetId: viewer.id,
-        relatedId: state.scenario.titleId,
-        field: "status",
-        value: "watching",
-        effectiveDate: ""
-      }, "The explicit adult viewing update was validated and saved locally.");
-      sendChat({ text: `Thanks for clarifying that ${viewer.firstName} is still watching ${state.scenario.titleName}. I’ve updated the household details. The selected agent model will now reconsider the subscription recommendation using that active-viewing fact.` });
-      await replaceRecommendationMessages("viewing_still_in_progress");
-    } else if (viewer && /(finished today|completed today|done today)/.test(normalized)) {
-      tools.update_household_context({
-        updateType: "viewing_confirmation",
-        payload: { memberId: viewer.id, titleId: state.scenario.titleId, status: "completed", completedOn: state.systemDate },
-        source: "adult_chat"
-      });
-      transact(draft => {
-        draft.review.status = "action_recommended";
-        draft.review.adultDecision = "Added viewing information";
-        draft.review.recommendationVersion += 1;
-      });
-      updateTraceForLocalMemoryChange({
-        updateType: "viewing_confirmation",
-        targetId: viewer.id,
-        relatedId: state.scenario.titleId,
-        field: "status",
-        value: "completed",
-        effectiveDate: state.systemDate
-      }, "The explicit adult viewing update was validated and saved locally.");
-      sendChat({ text: `Thanks for confirming that ${viewer.firstName} finished ${state.scenario.titleName} today. I’ve saved that update and recalculated the recommendation using the completed viewing information.` });
-      await replaceRecommendationMessages("viewing_completion_confirmed");
-    } else if (viewer && /(finished|completed|done)/.test(normalized)) {
-      sendChat({ text: `Thanks. Please tell me the date ${viewer.firstName} finished ${state.scenario.titleName} so I can save the completion without guessing.` });
-      sendChat({ kind: "choices" });
-    } else if (budgetMatch) {
-      const updatedBudget = Number(budgetMatch[1]);
-      tools.update_household_context({
-        updateType: "family_rule",
-        payload: { rule: "monthlyBudgetCap", value: updatedBudget },
-        source: "adult_chat"
-      });
-      refreshState();
-      updateTraceForLocalMemoryChange({
-        updateType: "family_rule",
-        targetId: state.household.id || state.household.householdId || "household",
-        relatedId: "",
-        field: "monthlyBudgetCap",
-        value: String(updatedBudget),
-        effectiveDate: state.systemDate
-      }, "The explicit adult budget update was validated and saved locally.");
-      sendChat({ text: `Thanks. I updated the household’s monthly streaming budget to ${engine.formatMoney(state, updatedBudget)} and saved today as the latest family-rules confirmation date.` });
-      if (state.review.started) {
-        transact(draft => {
-          draft.review.recommendationVersion += 1;
-          draft.review.adultDecision = "Updated household budget";
-        });
-        await replaceRecommendationMessages("household_budget_updated");
+    if (composerIntent === "preference-question") {
+      if (!pendingPreferenceUpdate()) {
+        composerIntent = "general";
+        setExpectedInputComposer("none");
+        showToast("The pending preference is no longer available");
+        return;
       }
-    } else if (/(why|reason|evidence|how did you)/.test(normalized)) {
-      const recommendation = engine.buildRecommendation(state);
-      sendChat({ text: `The recommendation is based on the confirmed viewing, current priority-title coverage, ${state.scenario.targetServiceName}’s ${engine.formatMoney(state, recommendation.finances.targetMonthlyCost)} monthly price, and its ${engine.displayDate(targetSubscription().nextRenewal, state.household.locale)} renewal. ${language.gerund} the service would change monthly spending from ${engine.formatMoney(state, recommendation.finances.beforeActionMonthly)} to ${engine.formatMoney(state, recommendation.finances.afterActionMonthly)} without blocking a current priority title.` });
-      sendChat({ kind: "choices" });
-    } else if (/(next season|next release|when.*return)/.test(normalized)) {
-      const waitDays = state.scenario.nextReleaseDate ? math.daysBetween(state.systemDate, state.scenario.nextReleaseDate) : null;
-      sendChat({ text: state.scenario.nextReleaseDate
-        ? `${state.scenario.titleName} ${state.scenario.nextReleaseLabel} is scheduled to arrive on ${state.scenario.targetServiceName} on ${engine.displayDate(state.scenario.nextReleaseDate, state.household.locale)}. That is ${waitDays} days after this review, so the family could reconsider the service closer to that date.`
-        : `No next release is currently recorded for ${state.scenario.titleName}.` });
-      sendChat({ kind: "choices" });
-    } else if (/(budget|afford|spend)/.test(normalized)) {
-      const finances = engine.calculateScenarioFinancials(state);
-      sendChat({ text: `The household currently spends ${engine.formatMoney(state, finances.beforeActionMonthly)} of its ${engine.formatMoney(state, finances.beforeBudget.monthlyBudgetCap)} monthly streaming budget, leaving ${engine.formatMoney(state, finances.beforeBudget.remaining)}. ${language.gerund} ${state.scenario.targetServiceName} would change spending to ${engine.formatMoney(state, finances.afterActionMonthly)} and leave ${engine.formatMoney(state, finances.afterBudget.remaining)} before tax.` });
-      sendChat({ kind: "choices" });
-    } else {
-      sendChat({
-        text: composerIntent === "disagree"
-          ? "Thanks for sharing that. I need a specific viewing, watchlist, subscription, budget, or family-rule fact before I can change the recommendation. What fact should I update?"
-          : composerIntent === "context-update"
-            ? "I’m ready to update the stored household context. Please identify the family member, title, subscription, budget amount, or family rule that changed, and provide the new information."
-          : "I can answer questions about the viewing evidence, renewal date, budget impact, next release, or why I made this recommendation. What would you like to explore?"
-      });
-      sendChat({ kind: "choices" });
+      await askOpenAI(text, "preference_question");
+      if (pendingPreferenceUpdate()) {
+        composerIntent = "preference-question";
+        composerMode.textContent = "Ask about the proposed preference";
+        messageInput.placeholder = "Ask another question, or choose one of the displayed preference options.";
+        syncComposerAvailability();
+      } else {
+        composerIntent = "general";
+        setExpectedInputComposer(state.review.nextExpectedInput);
+        syncComposerAvailability();
+      }
+      return;
     }
 
-    composerIntent = "general";
-    composerMode.textContent = "";
-    messageInput.placeholder = "Ask or share an update…";
-    if (!responseController) renderAll();
+    if (pendingPreferenceUpdate()) {
+      showToast("Choose a preference option before continuing");
+      syncComposerAvailability();
+      return;
+    }
+
+    if (
+      recommendationDecisionPending() &&
+      !["disagree", "question"].includes(composerIntent)
+    ) {
+      showToast("Choose a recommendation option before continuing");
+      syncComposerAvailability();
+      return;
+    }
+
+    const submittedIntent = composerIntent;
+    await askOpenAI(text, submittedIntent);
+    if (
+      recommendationDecisionPending() &&
+      ["disagree", "question"].includes(submittedIntent)
+    ) {
+      setComposer(submittedIntent);
+    } else {
+      composerIntent = "general";
+      setExpectedInputComposer(state.review.nextExpectedInput);
+      syncComposerAvailability();
+    }
   }
 
   function confirmExternalAction() {
@@ -2308,6 +2615,10 @@
     if (action === "question") setComposer("question");
     if (action === "confirm-action") confirmExternalAction();
     if (action === "revisit-recommendation") revisitRecommendation();
+    if (action === "save-preference") savePendingPreference();
+    if (action === "reject-preference") rejectPendingPreference();
+    if (action === "edit-preference") editPendingPreference();
+    if (action === "question-preference") questionPendingPreference();
     if (action === "not-yet") {
       const today = math.localDateIso(new Date());
       transact(draft => {
@@ -2321,6 +2632,65 @@
       sendChat({ text: `No problem. I’ll leave ${state.scenario.targetServiceName} unchanged and remind you once a day in this chat to ${reminderAction} until you confirm it is complete.` });
       renderAll();
       showToast("Daily reminder enabled");
+    }
+  });
+
+  messagesElement.addEventListener("submit", async event => {
+    if (event.target.id !== "recommendationFeedbackForm") return;
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const rating = form.get("feedbackRating");
+    if (!rating) {
+      showToast("Please choose Helpful or Poor recommendation");
+      return;
+    }
+    const feedbackComment = String(form.get("feedbackComment") || "").trim();
+    if (
+      feedbackComment &&
+      global.StreamingGuardMemory.containsSensitiveAccountInformation(feedbackComment)
+    ) {
+      showToast("Remove passwords, payment details, authentication codes, API keys, or other credentials before submitting feedback");
+      return;
+    }
+    if (feedbackComment && !agentModelConfigured()) {
+      showToast("Connect an AI model before submitting free-text feedback");
+      return;
+    }
+    const feedback = feedbackManager.recordFeedback({
+      scenarioId: state.scenario.id,
+      recommendationVersion: state.review.recommendationVersion,
+      recommendationInstanceId: currentRecommendation()?.instanceId,
+      displayAfterMessageCount: state.messages.length + (
+        feedbackComment &&
+        agentModelConfigured()
+          ? 1
+          : 0
+      ),
+      recommendationAction: currentRecommendation()?.actionType,
+      rating,
+      reasons: form.getAll("feedbackReason"),
+      comment: feedbackComment,
+      interpretationStatus: feedbackComment ? "model_review_requested" : "not_requested"
+    });
+    if (rating === "poor") {
+      captureRecommendationRegression(feedback);
+    }
+    renderConversation();
+    showToast(rating === "poor"
+      ? "Feedback saved and a regression draft was created"
+      : "Feedback saved");
+
+    if (feedback.comment) {
+      const interpretation = feedbackManager.interpretationRequest(feedback);
+      await askOpenAI(
+        interpretation.modelText,
+        "feedback",
+        {
+          visibleText: interpretation.visibleText,
+          contextText: interpretation.contextText
+        }
+      );
+      setExpectedInputComposer(state.review.nextExpectedInput);
     }
   });
 
@@ -2510,6 +2880,28 @@
         showToast("Rejudged saved outputs with independent API calls");
         return;
       }
+      if (action === "capture-regression") {
+        const selectedCase = evaluations.model().cases.find(item => item.eval_id === button.dataset.evalId);
+        const sourceKey = selectedCase?.result
+          ? `${selectedCase.eval_id}:${selectedCase.result.completedAt || selectedCase.result.promptHash || "current"}`
+          : "";
+        const existing = feedbackManager.hasRegressionCandidate(
+          "evaluation_failure",
+          sourceKey
+        );
+        captureEvaluationRegression(button.dataset.evalId);
+        renderEvaluations();
+        showToast(existing ? "Regression draft already exists" : "Regression draft created for human review");
+        return;
+      }
+      if (action === "export-regressions") {
+        downloadJson(
+          feedbackManager.exportPayload(),
+          `streaming-guard-regression-drafts-${math.localDateIso(new Date())}.json`
+        );
+        showToast("Regression drafts exported");
+        return;
+      }
       if (action === "run-case") {
         await evaluations.runCase(button.dataset.evalId, renderEvaluations);
         return;
@@ -2555,6 +2947,7 @@
     aiSettingsDialog.close();
     renderAIStatus();
     renderEvaluations();
+    syncComposerAvailability();
     showToast("All AI providers were disconnected and their saved keys were removed");
   });
   aiSettingsForm.addEventListener("submit", event => {
@@ -2570,6 +2963,7 @@
       aiSettingsDialog.close();
       renderAIStatus();
       renderEvaluations();
+      syncComposerAvailability();
       showToast("AI model connections saved");
     } catch (error) {
       showToast(error.message);
@@ -2586,7 +2980,10 @@
     refreshAIChatLogButton();
     memory.reset();
     evaluations.reset();
-    if (removeOpenAIConnection) openAI.clearSettings();
+    if (removeOpenAIConnection) {
+      openAI.clearSettings();
+      feedbackManager.clearAll();
+    }
     rebaseScenarioDates(math.localDateIso(new Date()));
     setChatBusy(false);
     renderAll();

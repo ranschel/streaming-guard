@@ -41,6 +41,7 @@ for (const file of [
   "js/agent-tools.js",
   "js/context-selector.js",
   "js/openai-client.js",
+  "js/feedback-manager.js",
   "js/ui-renderers.js"
 ]) {
   vm.runInContext(fs.readFileSync(file, "utf8"), sandbox, { filename: file });
@@ -57,6 +58,7 @@ const engine = window.StreamingGuardRecommendationEngine;
 const selector = window.StreamingGuardContextSelector;
 const client = window.StreamingGuardOpenAI;
 const ui = window.StreamingGuardUI;
+const feedback = window.StreamingGuardFeedback;
 
 const results = [];
 let harnessSequence = 0;
@@ -114,7 +116,8 @@ function validConversation(overrides = {}) {
     finalAction: "none",
     externalActionRequired: false,
     recommendationEffect: "unchanged",
-    nextExpectedInput: "additional_context",
+    preferenceDisposition: "not_applicable",
+    nextExpectedInput: "additional_information",
     safetyDisposition: "normal",
     refusalSections: {
       yourRequest: "",
@@ -123,7 +126,7 @@ function validConversation(overrides = {}) {
       whatYouCanDoNext: ""
     },
     reasonCodes: ["question_answered"],
-    proposedContextUpdates: [],
+    proposedHouseholdUpdates: [],
     ...overrides
   };
 }
@@ -815,7 +818,7 @@ await test("safety_validation", "out-of-scope response cannot update memory", ()
     reply: "That request is outside Streaming Guard's scope.",
     turnType: "out_of_scope",
     safetyDisposition: "out_of_scope",
-    proposedContextUpdates: [{
+    proposedHouseholdUpdates: [{
       updateType: "family_rule",
       targetId: "HH-001",
       relatedId: "",
@@ -1048,6 +1051,67 @@ await test("provider_ui", "recommendation, refusal, and outcome cards render", (
   });
   assert(refusal.includes("Execution refusal"));
   assert(refusal.includes("What you can do next"));
+});
+
+await test("memory", "an explicitly approved preference note is written through the controlled tool", () => {
+  const harness = createHarness();
+  harness.tools.update_household_context({
+    updateType: "preference_note",
+    payload: { preference: "Prefer cancellations only when monthly savings exceed $5." },
+    source: "adult_feedback_approved",
+    scope: "permanent"
+  });
+  const saved = harness.memory.getState().familyRules.preferenceNotes;
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].source, "adult_feedback_approved");
+  const contextMarkup = ui.memoryMarkup(harness.memory.getState());
+  assert(contextMarkup.includes("Saved household preferences"));
+  assert(contextMarkup.includes("Prefer cancellations only when monthly savings exceed $5."));
+  assert(contextMarkup.includes("Ongoing · future recommendations"));
+});
+
+await test("provider_ui", "post-resolution recommendation feedback is scannable and explains approval", () => {
+  const markup = ui.feedbackMarkup({ submitted: false });
+  assert(markup.includes("Poor recommendation"));
+  assert(markup.includes("explicitly approve"));
+  assert(!markup.includes("regression"));
+  assert(!markup.includes("createRegression"));
+});
+
+await test("safety_validation", "poor feedback creates one reviewer-controlled regression draft", () => {
+  storageValues.delete("streaming_guard_feedback_and_regressions_v1");
+  const savedFeedback = feedback.recordFeedback({
+    scenarioId: "SG-001",
+    recommendationVersion: 2,
+    recommendationInstanceId: "component-recommendation-2",
+    recommendationAction: "cancel",
+    rating: "poor",
+    reasons: ["Timing was wrong"],
+    comment: "Do not cancel this close to a release."
+  });
+  const candidate = feedback.captureRegressionCandidate({
+    sourceType: "recommendation_feedback",
+    sourceKey: savedFeedback.id,
+    title: "Timing regression",
+    failureSummary: savedFeedback.comment
+  });
+  feedback.captureRegressionCandidate({
+    sourceType: "recommendation_feedback",
+    sourceKey: savedFeedback.id,
+    title: "Duplicate"
+  });
+  assert.equal(candidate.reviewerRequired, true);
+  assert.equal(candidate.status, "draft");
+  assert.equal(feedback.regressionCandidates().length, 1);
+});
+
+await test("safety_validation", "regression export cannot silently promote a draft into official evals", () => {
+  const payload = feedback.exportPayload();
+  assert.equal(payload.exportType, "Draft regression candidates");
+  assert(payload.notice.includes("human review"));
+  assert(payload.candidates.every(candidate =>
+    candidate.status === "draft" && candidate.reviewerRequired === true
+  ));
 });
 
 const categoryScores = Object.fromEntries(

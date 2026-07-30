@@ -277,6 +277,7 @@
         contentLimits: clone(knowledge.familyRules.content_limits),
         contentRatingExceptions: [],
         priorityPolicy: knowledge.familyRules.priority_policy,
+        preferenceNotes: [],
         additionalEscalations: clone(knowledge.familyRules.additional_escalations),
         ruleChanges: []
       },

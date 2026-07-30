@@ -518,6 +518,21 @@
           }
           state.familyRules.ruleChanges.push({ rule, value, scope, source, timestamp });
           state.contextFreshness.familyRulesOffsetDays = 0;
+        } else if (updateType === "preference_note") {
+          const preference = String(payload.preference || "").trim();
+          if (!preference) throw new TypeError("A preference note is required.");
+          if (preference.length > 240) throw new RangeError("A preference note must be concise.");
+          if (source !== "adult_feedback_approved") {
+            throw new RangeError("A preference note requires explicit adult feedback approval.");
+          }
+          state.familyRules.preferenceNotes = Array.isArray(state.familyRules.preferenceNotes)
+            ? state.familyRules.preferenceNotes
+            : [];
+          if (!state.familyRules.preferenceNotes.some(item => item.preference === preference)) {
+            state.familyRules.preferenceNotes.push({ preference, scope, source, timestamp });
+          }
+          state.familyRules.ruleChanges.push({ rule: "preferenceNote", value: preference, scope, source, timestamp });
+          state.contextFreshness.familyRulesOffsetDays = 0;
         } else if (updateType === "additional_escalation") {
           const condition = String(payload.condition || "").trim();
           if (!condition) throw new TypeError("An additional escalation condition is required.");
@@ -603,6 +618,7 @@
         } else if ([
           "title_rating_exception",
           "family_rule",
+          "preference_note",
           "additional_escalation",
           "remove_additional_escalation"
         ].includes(updateType)) {

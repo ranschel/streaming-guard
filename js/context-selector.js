@@ -729,13 +729,19 @@
       ));
     }
 
+    const pendingPreference = (state.review?.pendingContextUpdates || []).some(update =>
+      update?.updateType === "preference_note" &&
+      update?.requiresAdultConfirmation === true
+    );
+
     if (
       requestType === "conversation" &&
       intent === "focused_conversation" &&
       !selectedServiceIds.size &&
       !selectedTitleIds.size &&
       !selectedMemberIds.size &&
-      !hasStreamingDomainLanguage(normalizedMessage)
+      !hasStreamingDomainLanguage(normalizedMessage) &&
+      !pendingPreference
     ) {
       intent = "out_of_scope";
       outOfScopeRequest = true;
@@ -843,6 +849,16 @@
         // These intents are complete without household entities. Product metadata,
         // scope boundaries, and execution authority come from application-owned
         // context and immutable instructions rather than household records.
+      } else if (pendingPreference) {
+        if (state.scenario?.targetServiceId) selectedServiceIds.add(state.scenario.targetServiceId);
+        if (state.scenario?.secondaryServiceId) selectedServiceIds.add(state.scenario.secondaryServiceId);
+        if (state.scenario?.titleId) selectedTitleIds.add(state.scenario.titleId);
+        (state.scenario?.intendedViewerIds || []).forEach(memberId => selectedMemberIds.add(memberId));
+        provenance.push(recordReason(
+          "pending_preference",
+          "current",
+          "The adult is responding to a typed pending household-preference interaction."
+        ));
       } else if (recommendation || state.review?.generatedRecommendation) {
         if (state.scenario?.targetServiceId) selectedServiceIds.add(state.scenario.targetServiceId);
         if (state.scenario?.secondaryServiceId) selectedServiceIds.add(state.scenario.secondaryServiceId);

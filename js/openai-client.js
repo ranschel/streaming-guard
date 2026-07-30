@@ -171,6 +171,74 @@
       .replace(/[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g, "");
   }
 
+  const adultVisibleInternalLanguage = Object.freeze([
+    /\bcontext\b/i,
+    /\bdataset\b/i,
+    /\bschema\b/i,
+    /\bsystem prompt\b/i,
+    /\bdeveloper prompt\b/i,
+    /\btool output\b/i,
+    /\brecord id\b/i,
+    /\bjson\b/i,
+    /\b[\w-]+\.(?:csv|json|md)\b/i
+  ]);
+
+  function assertAudienceSafeLanguage(values) {
+    const text = normalizeValidationText((values || []).filter(value =>
+      typeof value === "string" && value.trim()
+    ).join("\n"));
+    if (adultVisibleInternalLanguage.some(pattern => pattern.test(text))) {
+      throw new Error(
+        "Adult-visible language included prohibited implementation terminology. Rewrite the adult-visible wording in ordinary household and streaming language without changing any facts, calculations, decisions, safety state, or proposed household update."
+      );
+    }
+  }
+
+  function audienceSafeDecisionFacts(decisionPacket) {
+    if (!decisionPacket) return null;
+    const {
+      triggerContext,
+      mandatoryValidationRules,
+      groundingVocabulary: _groundingVocabulary,
+      ...facts
+    } = decisionPacket;
+    return {
+      ...facts,
+      trigger: triggerContext || null,
+      required_boundaries: mandatoryValidationRules || null
+    };
+  }
+
+  function audienceSafeGrounding(selectedContext) {
+    const supplied = selectedContext?.householdContext || {};
+    return {
+      current_date: supplied.current_date || supplied.system_date || null,
+      request_trigger: supplied.trigger_context || null,
+      information_freshness: supplied.context_freshness || null,
+      household: supplied.household || null,
+      household_members: supplied.family_members || [],
+      household_preferences_and_rules: supplied.current_family_rules || null,
+      current_subscriptions: supplied.current_subscriptions || [],
+      recent_subscription_changes: supplied.recent_subscription_changes || [],
+      viewing_information: supplied.viewing_information || [],
+      household_watchlist: supplied.household_watchlist || [],
+      recently_completed_viewing: supplied.recent_completed_viewing || [],
+      household_spending_summary: supplied.portfolio_summary || null,
+      product_information: supplied.product_context || null,
+      relevant_services: supplied.candidate_services || [],
+      verified_facts_and_calculations: audienceSafeDecisionFacts(
+        supplied.decision_facts_and_calculations
+      ),
+      displayed_recommendation: supplied.displayed_recommendation || null,
+      current_review_status: supplied.review_state ? {
+        discussion_status: supplied.review_state.discussionStatus || null,
+        next_information_needed: supplied.review_state.nextExpectedInput || null,
+        safety_status: supplied.review_state.safetyDisposition || null,
+        pending_household_updates: supplied.review_state.pendingContextUpdates || []
+      } : null
+    };
+  }
+
   function collectGroundedDateDisplays(value, locale = "en-US", dates = new Set(), seen = new WeakSet()) {
     if (typeof value === "string") {
       const completeDates = value.match(/\b(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b/g) || [];
@@ -234,12 +302,30 @@
     };
   }
 
+  function audienceSafeHistoricalAgentText(value) {
+    const text = typeof value === "string" ? value.trim() : "";
+    if (!text) return "";
+    const normalized = normalizeValidationText(text);
+    return adultVisibleInternalLanguage.some(pattern => pattern.test(normalized))
+      ? ""
+      : text;
+  }
+
   function recentConversation(messages, limit = 6) {
     if (!Number.isInteger(limit) || limit <= 0) return "";
     return (messages || [])
       .filter(message => message.text && !message.redacted)
       .slice(-limit)
-      .map(message => `${message.role === "user" ? "Adult" : "Streaming Guard"}: ${message.text}`)
+      .map(message => {
+        if (message.role === "user") {
+          // Adult messages must remain exact. Privacy filtering happens before
+          // an eligible message reaches this model-input assembly boundary.
+          return `Adult: ${message.text}`;
+        }
+        const safeText = audienceSafeHistoricalAgentText(message.text);
+        return safeText ? `Streaming Guard: ${safeText}` : "";
+      })
+      .filter(Boolean)
       .join("\n");
   }
 
@@ -520,6 +606,7 @@
         enum: [
           "viewing_confirmation",
           "family_rule",
+          "preference_note",
           "subscription_record",
           "watchlist_item",
           "title_rating_exception",
@@ -527,15 +614,15 @@
           "remove_additional_escalation",
           "external_action_confirmation"
         ],
-        description: "Choose the record family being changed: viewing_confirmation for reported progress/completion; family_rule for an editable household rule; subscription_record for a service status, plan, price, renewal, or expiration fact; watchlist_item for a member-title priority/status; title_rating_exception for one child and one title; additional_escalation or remove_additional_escalation for household-added escalation conditions; external_action_confirmation only for explicit completion of the matching displayed recommendation."
+        description: "Choose the record family being changed: viewing_confirmation for reported progress/completion; family_rule for a named editable household rule; preference_note for a concise durable preference explicitly approved by the adult; subscription_record for a service status, plan, price, renewal, or expiration fact; watchlist_item for a member-title priority/status; title_rating_exception for one child and one title; additional_escalation or remove_additional_escalation for household-added escalation conditions; external_action_confirmation only for explicit completion of the matching displayed recommendation."
       },
       targetId: {
         type: "string",
-        description: "The exact primary identifier from context. Use the member ID for viewing, watchlist, and title-rating updates; the service ID for subscription updates; and the applicable household/rule identifier for rule updates. For external_action_confirmation the application validates and derives the protected target from the displayed recommendation."
+        description: "The exact primary identifier from the supplied information. Use the member ID for viewing, watchlist, and title-rating updates; the service ID for subscription updates; and the applicable household/rule identifier for rule updates. For external_action_confirmation the application validates and derives the protected target from the displayed recommendation."
       },
       relatedId: {
         type: "string",
-        description: "The exact related identifier from context: title ID for viewing, watchlist, or title-rating updates; plan ID for subscriptionPlan; otherwise an empty string. For a title-rating exception, this title ID must also be repeated in value."
+        description: "The exact related identifier from the supplied information: title ID for viewing, watchlist, or title-rating updates; plan ID for subscriptionPlan; otherwise an empty string. For a title-rating exception, this title ID must also be repeated in value."
       },
       field: {
         type: "string",
@@ -545,6 +632,7 @@
           "advertisingTolerance",
           "resolutionPreference",
           "priorityPolicy",
+          "preferenceNote",
           "contentRatingException",
           "condition",
           "subscriptionStatus",
@@ -556,7 +644,7 @@
           "priority",
           "watchlistStatus"
         ],
-        description: "Choose the field that belongs to updateType. Use status for viewing_confirmation; subscriptionPlan, subscriptionStatus, monthlyCost, renewalStatus, nextRenewal, or expirationDate for subscription_record; priority or watchlistStatus for watchlist_item; contentRatingException for title_rating_exception; condition for escalation updates; and the named editable household field for family_rule."
+        description: "Choose the field that belongs to updateType. Use status for viewing_confirmation; preferenceNote for preference_note; subscriptionPlan, subscriptionStatus, monthlyCost, renewalStatus, nextRenewal, or expirationDate for subscription_record; priority or watchlistStatus for watchlist_item; contentRatingException for title_rating_exception; condition for escalation updates; and the named editable household field for family_rule."
       },
       value: {
         type: "string",
@@ -616,7 +704,18 @@
       recommendationEffect: {
         type: "string",
         enum: ["unchanged", "revise", "reopen", "close"],
-        description: "Use unchanged for ordinary discussion or nonmaterial information; revise only when a complete confirmed context update materially changes the decision; reopen only for revisit_requested; close only after explicit acceptance, rejection, or validated external-action completion."
+        description: "Use unchanged for ordinary discussion or nonmaterial information; revise only when a complete confirmed household-information update materially changes the decision; reopen only for revisit_requested; close only after explicit acceptance, rejection, or validated external-action completion."
+      },
+      preferenceDisposition: {
+        type: "string",
+        enum: [
+          "not_applicable",
+          "one_time_feedback",
+          "lasting_preference_proposed",
+          "pending_preference_revised",
+          "pending_preference_question"
+        ],
+        description: "Use not_applicable outside the recommendation-feedback preference workflow. For recommendation feedback, distinguish one-time feedback from a lasting preference proposal. A lasting proposal must include one unapproved durable preference update for the application to present as a blocking choice. Use pending_preference_revised only after the adult edits that proposal, and pending_preference_question only when answering a question about it."
       },
       nextExpectedInput: {
         type: "string",
@@ -630,9 +729,9 @@
           "subscription_plan",
           "budget_amount",
           "external_action_confirmation",
-          "additional_context"
+          "additional_information"
         ],
-        description: "The next specific input needed from the adult. Select the matching value for a missing viewing confirmation, completion date, rule scope, title exception, exact subscription plan, budget amount, external-action completion, or other context; use adult_decision when the recommendation is ready for a decision and none when nothing remains."
+        description: "The next specific input needed from the adult. Select the matching value for a missing viewing confirmation, completion date, rule scope, title exception, exact subscription plan, budget amount, external-action completion, or other information; use adult_decision when the recommendation is ready for a decision and none when nothing remains."
       },
       safetyDisposition: {
         type: "string",
@@ -702,9 +801,9 @@
           ]
         }
       },
-      proposedContextUpdates: {
+      proposedHouseholdUpdates: {
         type: "array",
-        description: "Validated household-memory changes proposed from explicit adult statements. The application decides whether to apply them.",
+        description: "Validated household-information changes proposed from explicit adult statements. The application decides whether to apply them.",
         items: {
           type: "object",
           properties: updateProperties,
@@ -779,12 +878,33 @@
     return candidate;
   }
 
-  function validateConversationResponse(candidate, recommendation, decisionPacket, state = null) {
+  function validateConversationResponse(
+    candidate,
+    recommendation,
+    decisionPacket,
+    state = null,
+    { intent = "general" } = {}
+  ) {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
       throw new TypeError("The model did not return a conversational response object.");
     }
     if (typeof candidate.reply !== "string" || !candidate.reply.trim()) {
       throw new TypeError("The model returned an empty conversational reply.");
+    }
+
+    if (
+      ["feedback", "preference_edit", "preference_question"].includes(intent) &&
+      (
+        candidate.discussionStatus !== "open" ||
+        !["none", "needs_more_information"].includes(candidate.outcome) ||
+        candidate.finalAction !== "none" ||
+        candidate.externalActionRequired ||
+        candidate.recommendationEffect !== "unchanged"
+      )
+    ) {
+      throw new Error(
+        "A feedback, preference-edit, or preference-question turn must keep the recommendation unchanged and the discussion open, without a final decision or external action."
+      );
     }
 
     const externalActions = new Set(["cancel", "pause", "subscribe"]);
@@ -845,14 +965,14 @@
     if (!Array.isArray(candidate.reasonCodes)) {
       throw new TypeError("The model returned invalid conversation reason codes.");
     }
-    if (!Array.isArray(candidate.proposedContextUpdates)) {
-      throw new TypeError("The model returned invalid proposed context updates.");
+    if (!Array.isArray(candidate.proposedHouseholdUpdates)) {
+      throw new TypeError("The model returned invalid proposed household-information updates.");
     }
-    const externalConfirmationUpdates = candidate.proposedContextUpdates.filter(update =>
+    const externalConfirmationUpdates = candidate.proposedHouseholdUpdates.filter(update =>
       update?.updateType === "external_action_confirmation"
     );
     if (candidate.outcome === "external_action_confirmed") {
-      if (candidate.proposedContextUpdates.some(update =>
+      if (candidate.proposedHouseholdUpdates.some(update =>
         update?.updateType !== "external_action_confirmation"
       )) {
         throw new Error("An external-action confirmation cannot include unrelated household updates.");
@@ -865,7 +985,7 @@
       if (!completionStatus) {
         throw new Error("The confirmed external action has no supported subscription status.");
       }
-      candidate.proposedContextUpdates = [{
+      candidate.proposedHouseholdUpdates = [{
         updateType: "external_action_confirmation",
         targetId: decisionPacket.target.serviceId,
         relatedId: "",
@@ -879,23 +999,93 @@
       throw new Error("A subscription status update requires an explicit external-action confirmation outcome.");
     }
     if (
-      candidate.proposedContextUpdates.some(update => update.requiresAdultConfirmation === false) &&
+      candidate.proposedHouseholdUpdates.some(update => update.requiresAdultConfirmation === false) &&
       !["new_information", "recommendation_decision"].includes(candidate.turnType)
     ) {
-      throw new Error("Only explicit new information or a decision may propose a confirmed context update.");
+      throw new Error("Only explicit new information or a decision may propose a confirmed household-information update.");
     }
+    const pendingPreferenceWorkflowUpdate = (
+      ["feedback", "preference_edit"].includes(intent) &&
+      ["lasting_preference_proposed", "pending_preference_revised"].includes(
+        candidate.preferenceDisposition
+      ) &&
+      candidate.proposedHouseholdUpdates.length === 1 &&
+      candidate.proposedHouseholdUpdates.every(update =>
+        update.updateType === "preference_note" &&
+        update.requiresAdultConfirmation === true &&
+        update.scope === "permanent"
+      )
+    );
     if (
-      candidate.proposedContextUpdates.some(update => update.requiresAdultConfirmation === true) &&
+      candidate.proposedHouseholdUpdates.some(update => update.requiresAdultConfirmation === true) &&
+      !pendingPreferenceWorkflowUpdate &&
       !["clarification_request", "new_information", "recommendation_decision"].includes(candidate.turnType)
     ) {
-      throw new Error("A pending context update requires clarification or an explicit information turn.");
+      throw new Error("A pending household-information update requires clarification or an explicit information turn.");
     }
-    if (candidate.proposedContextUpdates.some(update =>
+    if (candidate.proposedHouseholdUpdates.some(update =>
       !update || typeof update !== "object" || typeof update.value !== "string"
     )) {
-      throw new TypeError("The model returned an invalid context-update proposal.");
+      throw new TypeError("The model returned an invalid household-information update.");
     }
-    candidate.proposedContextUpdates
+    if (intent === "feedback") {
+      if (candidate.proposedHouseholdUpdates.some(update =>
+        update.updateType !== "preference_note" || update.requiresAdultConfirmation !== true
+      )) {
+        throw new Error("Recommendation feedback may only propose an unapproved lasting preference.");
+      }
+      if (candidate.recommendationEffect !== "unchanged") {
+        throw new Error("Recommendation feedback cannot silently revise or reopen the resolved recommendation.");
+      }
+      if (candidate.preferenceDisposition === "one_time_feedback") {
+        if (candidate.proposedHouseholdUpdates.length) {
+          throw new Error("One-time recommendation feedback cannot create a pending household preference.");
+        }
+      } else if (candidate.preferenceDisposition === "lasting_preference_proposed") {
+        if (
+          candidate.proposedHouseholdUpdates.length !== 1 ||
+          candidate.proposedHouseholdUpdates[0].updateType !== "preference_note" ||
+          candidate.proposedHouseholdUpdates[0].requiresAdultConfirmation !== true ||
+          candidate.proposedHouseholdUpdates[0].scope !== "permanent"
+        ) {
+          throw new Error("A lasting feedback preference must return exactly one unapproved durable preference for adult review.");
+        }
+      } else {
+        throw new Error("Recommendation feedback must be classified as one-time feedback or a lasting preference proposal.");
+      }
+    }
+    if (intent === "preference_edit") {
+      if (
+        candidate.preferenceDisposition !== "pending_preference_revised" ||
+        candidate.proposedHouseholdUpdates.length !== 1 ||
+        candidate.proposedHouseholdUpdates[0].updateType !== "preference_note" ||
+        candidate.proposedHouseholdUpdates[0].requiresAdultConfirmation !== true ||
+        candidate.proposedHouseholdUpdates[0].scope !== "permanent"
+      ) {
+        throw new Error("A preference edit must return exactly one revised unapproved permanent preference.");
+      }
+      if (candidate.recommendationEffect !== "unchanged") {
+        throw new Error("Editing a preference cannot revise or reopen the resolved recommendation.");
+      }
+    }
+    if (intent === "preference_question") {
+      if (candidate.preferenceDisposition !== "pending_preference_question") {
+        throw new Error("A question about a pending preference must preserve the pending-preference question state.");
+      }
+      if (candidate.proposedHouseholdUpdates.length) {
+        throw new Error("A question about a pending preference cannot save, reject, or revise that preference.");
+      }
+      if (candidate.recommendationEffect !== "unchanged") {
+        throw new Error("A question about a pending preference cannot revise or reopen the resolved recommendation.");
+      }
+    }
+    if (
+      !["feedback", "preference_edit", "preference_question"].includes(intent) &&
+      candidate.preferenceDisposition !== "not_applicable"
+    ) {
+      throw new Error("A non-feedback conversation turn cannot create or modify a pending preference state.");
+    }
+    candidate.proposedHouseholdUpdates
       .filter(update => update.updateType === "subscription_record")
       .forEach(update => {
         const servicePlans = (global.StreamingGuardKnowledge?.services || [])
@@ -930,7 +1120,7 @@
           update.value === "active" &&
           state &&
           !state.subscriptions.some(subscription => subscription.serviceId === update.targetId) &&
-          !candidate.proposedContextUpdates.some(planUpdate =>
+          !candidate.proposedHouseholdUpdates.some(planUpdate =>
             planUpdate.updateType === "subscription_record" &&
             planUpdate.targetId === update.targetId &&
             planUpdate.field === "subscriptionPlan"
@@ -947,9 +1137,9 @@
       });
     if (
       candidate.recommendationEffect === "revise" &&
-      !candidate.proposedContextUpdates.some(update => update.requiresAdultConfirmation === false)
+      !candidate.proposedHouseholdUpdates.some(update => update.requiresAdultConfirmation === false)
     ) {
-      throw new Error("A recommendation revision requires at least one complete context update.");
+      throw new Error("A recommendation revision requires at least one complete household-information update.");
     }
     if (
       candidate.safetyDisposition === "adult_judgment_required" &&
@@ -988,12 +1178,12 @@
         candidate.finalAction !== "none" ||
         candidate.externalActionRequired ||
         candidate.recommendationEffect !== "unchanged" ||
-        candidate.proposedContextUpdates.length
+        candidate.proposedHouseholdUpdates.length
       ) {
-        throw new Error("An out-of-scope turn cannot answer the unrelated task, close the recommendation, or change household context.");
+        throw new Error("An out-of-scope turn cannot answer the unrelated task, close the recommendation, or change saved household information.");
       }
     }
-    candidate.proposedContextUpdates
+    candidate.proposedHouseholdUpdates
       .filter(update => update.updateType === "title_rating_exception")
       .forEach(update => {
         const titleId = update.relatedId || update.value;
@@ -1041,6 +1231,13 @@
     } else if (refusalValues.some(value => value.trim())) {
       throw new Error("Refusal sections must be empty when the turn is not an execution refusal.");
     }
+    assertAudienceSafeLanguage([
+      candidate.reply,
+      ...refusalValues,
+      ...candidate.proposedHouseholdUpdates
+        .filter(update => ["preference_note", "additional_escalation"].includes(update.updateType))
+        .map(update => update.value)
+    ]);
     const normalizedReply = normalizeValidationText(candidate.reply);
     const suppliedUrls = normalizedReply.match(/https?:\/\/[^\s<>"')\]]+/g) || [];
     const approvedServiceRecords = global.StreamingGuardKnowledge?.services || [];
@@ -1125,6 +1322,21 @@
     if (!Array.isArray(candidate.evidence) || !candidate.evidence.length || candidate.evidence.some(item => typeof item !== "string")) {
       throw new TypeError("Model recommendation evidence is invalid.");
     }
+    assertAudienceSafeLanguage([
+      candidate.action,
+      candidate.confidence,
+      candidate.trigger,
+      candidate.financialHeadline,
+      candidate.financialDetails,
+      candidate.rationale,
+      ...candidate.evidence,
+      candidate.decisionHeadline,
+      candidate.decisionDetails,
+      candidate.nextHeadline,
+      candidate.nextDetails,
+      candidate.reminderHeadline,
+      candidate.reminderDetails
+    ]);
 
     const candidateText = normalizeValidationText(JSON.stringify(candidate));
 
@@ -1163,6 +1375,7 @@
     reason = "initial_subscription_check",
     contextSelection = null,
     model = null,
+    validationFeedback = "",
     signal
   }) {
     const instructions = recommendationInstructions(knowledge);
@@ -1176,10 +1389,13 @@
     });
     const input = [
       `Recommendation reason: ${reason}`,
-      "Deterministically selected household context, feasible actions, and calculations (no recommendation has been preselected):",
-      JSON.stringify(selectedContext.householdContext, null, 2),
+      "Verified household information, feasible actions, and calculations (no recommendation has been preselected):",
+      JSON.stringify(audienceSafeGrounding(selectedContext), null, 2),
       "\nRecent conversation:",
-      recentConversation(state.messages, selectedContext.recentConversationLimit) || "No relevant previous text messages."
+      recentConversation(state.messages, selectedContext.recentConversationLimit) || "No relevant previous text messages.",
+      validationFeedback
+        ? `\nCorrection required: ${validationFeedback}`
+        : ""
     ].join("\n");
     const result = await requestResponse({
       instructions,
@@ -1268,11 +1484,11 @@
     }));
     const input = [
       `Conversation mode: ${intent}`,
-      "Deterministically selected household context and displayed recommendation:",
-      JSON.stringify(selectedContext.householdContext, null, 2),
-      "\nSelected fictional service plans:",
+      "Verified household information and the displayed recommendation:",
+      JSON.stringify(audienceSafeGrounding(selectedContext), null, 2),
+      "\nKnown service plans:",
       JSON.stringify(servicePlanCatalog, null, 2),
-      "\nSelected fictional title catalog:",
+      "\nKnown titles and availability:",
       JSON.stringify(titleCatalog, null, 2),
       "\nRecent conversation:",
       recentConversation(state.messages, selectedContext.recentConversationLimit) || "No relevant previous text messages.",
@@ -1310,7 +1526,7 @@
       return {
         ...result,
         contextSelection: selectedContext,
-        response: validateConversationResponse(parsed, recommendation, decisionPacket, state)
+        response: validateConversationResponse(parsed, recommendation, decisionPacket, state, { intent })
       };
     } catch (error) {
       error.output = parsed;
@@ -1417,6 +1633,9 @@
     evaluationJudgeInstructions,
     recommendationSchema,
     validateRecommendation,
+    audienceSafeGrounding,
+    assertAudienceSafeLanguage,
+    recentConversation,
     conversationResponseSchema,
     validateConversationResponse,
     evaluationJudgmentSchema,

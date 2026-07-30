@@ -3,6 +3,11 @@ import fs from "node:fs";
 
 const gates = [
   {
+    id: "feedback_regression_loop",
+    label: "Feedback and regression loop",
+    args: ["tests/scripts/verify-feedback-regression-loop.mjs"]
+  },
+  {
     id: "component_quality",
     label: "Deterministic component quality",
     args: ["tests/scripts/verify-component-quality.mjs"]
@@ -38,6 +43,9 @@ const results = gates.map(gate => {
 const componentReport = JSON.parse(
   fs.readFileSync("tests/reports/component_quality_results.json", "utf8")
 );
+const feedbackReport = JSON.parse(
+  fs.readFileSync("tests/reports/feedback_regression_loop_results.json", "utf8")
+);
 const contextReport = JSON.parse(
   fs.readFileSync("tests/reports/context_search_benchmark_results.json", "utf8")
 );
@@ -47,6 +55,11 @@ const report = {
   testType: "streaming_guard_deterministic_quality_gates",
   targetSuccessRate: 100,
   passed: results.every(result => result.passed),
+  feedbackRegressionLoop: {
+    passed: feedbackReport.passed,
+    total: feedbackReport.total,
+    successRate: feedbackReport.successRate
+  },
   componentAssertions: {
     passed: componentReport.passed,
     total: componentReport.total,

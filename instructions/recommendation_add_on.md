@@ -26,7 +26,7 @@ Express every required part of the recommendation in friendly, complete, nonrepe
 
 The authorized adult is the person reading the recommendation. Address that person directly as `you` and `your`; do not refer to the authorized adult by name when asking for a decision or action. Family-member names may still be used when describing viewing evidence or preferences.
 
-Name the exact target service and state the actual triggering event supported by the runtime context. Explain the material evidence and trade-offs that drove the recommendation in plain language.
+Name the exact target service and state the actual triggering event supported by the verified household information. Explain the material evidence and trade-offs that drove the recommendation in plain language.
 
 State every material premise needed to support the decision explicitly rather than relying on implication. This includes relevant current and future availability, subscription status, and other facts whose presence or absence changes the recommended action.
 

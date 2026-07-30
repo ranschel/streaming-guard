@@ -170,16 +170,24 @@
       ["normal", "adult_judgment_required"].includes(state.review.safetyDisposition);
     if (!discussionOpen || !safetyAllowsChoices || !recommendation || ["waiting_for_external_action", "completed", "discussion_resolved"].includes(state.review.status)) return "";
     if (recommendation.status === "Adult judgment required") {
-      return `<div class="choices" aria-label="Respond to recommendation">
-        <button class="choice-button" type="button" data-action="disagree">Add or correct information</button>
-        <button class="choice-button" type="button" data-action="question">Ask a question</button>
-      </div>`;
+      return `<section class="pending-choice-panel" aria-label="Respond to recommendation">
+        <span class="eyebrow">Adult response required</span>
+        <h3>How would you like to continue?</h3>
+        <div class="choices">
+          <button class="choice-button" type="button" data-action="disagree">Add or correct information</button>
+          <button class="choice-button" type="button" data-action="question">Ask a question</button>
+        </div>
+      </section>`;
     }
-    return `<div class="choices" aria-label="Respond to recommendation">
-      <button class="choice-button agree" type="button" data-action="agree">I agree</button>
-      <button class="choice-button" type="button" data-action="disagree">I disagree or have more information</button>
-      <button class="choice-button" type="button" data-action="question">Ask a question</button>
-    </div>`;
+    return `<section class="pending-choice-panel" aria-label="Respond to recommendation">
+      <span class="eyebrow">Recommendation decision</span>
+      <h3>How would you like to continue?</h3>
+      <div class="choices">
+        <button class="choice-button agree" type="button" data-action="agree">I agree</button>
+        <button class="choice-button" type="button" data-action="disagree">I disagree or have more information</button>
+        <button class="choice-button" type="button" data-action="question">Ask a question</button>
+      </div>
+    </section>`;
   }
 
   function confirmationMarkup(state, recommendation, accountUrl) {
@@ -213,6 +221,58 @@
     const legacyRefusal = message.role !== "user" ? refusalSectionsFromText(message.text) : null;
     if (legacyRefusal) return refusalMarkup(legacyRefusal, message.time);
     return `<div class="message ${escapeHtml(message.role)}"><div class="bubble"><p>${escapeHtml(displayChatText(message.text))}</p></div><div class="message-time">${escapeHtml(message.time)}</div></div>`;
+  }
+
+  function feedbackMarkup({ submitted = false } = {}) {
+    if (submitted) {
+      return `<section class="recommendation-feedback submitted" aria-label="Recommendation feedback">
+        <strong>Feedback saved</strong>
+        <p>Thank you. Feedback is kept separately from household memory. Any lasting preference still requires your explicit approval before it can be saved.</p>
+      </section>`;
+    }
+    const reasons = [
+      "Savings too small",
+      "Timing was wrong",
+      "A title or viewer was missing",
+      "A household preference was misunderstood",
+      "The explanation was unclear",
+      "Other"
+    ];
+    return `<form class="recommendation-feedback" id="recommendationFeedbackForm">
+      <div>
+        <span class="eyebrow">Improve future recommendations</span>
+        <h3>Was this recommendation useful?</h3>
+        <p>Your feedback is kept separately from household memory and reviewed as feedback first. It never changes a household rule unless you explicitly approve a proposed preference.</p>
+      </div>
+      <div class="feedback-rating" role="radiogroup" aria-label="Recommendation rating">
+        <label><input type="radio" name="feedbackRating" value="helpful" required> Helpful</label>
+        <label><input type="radio" name="feedbackRating" value="poor" required> Poor recommendation</label>
+      </div>
+      <fieldset>
+        <legend>What influenced your rating? <small>(optional)</small></legend>
+        <div class="feedback-reasons">${reasons.map(reason => `<label><input type="checkbox" name="feedbackReason" value="${escapeHtml(reason)}"> ${escapeHtml(reason)}</label>`).join("")}</div>
+      </fieldset>
+      <label class="feedback-comment">What should Streaming Guard understand?
+        <textarea name="feedbackComment" rows="3" placeholder="Optional feedback or household preference"></textarea>
+      </label>
+      <button class="primary-button" type="submit">Submit feedback</button>
+    </form>`;
+  }
+
+  function preferenceApprovalMarkup(update) {
+    if (!update) return "";
+    return `<section class="preference-approval" aria-label="Review lasting household preference">
+      <span class="eyebrow">Lasting household preference</span>
+      <h3>Would you like me to save this for future recommendations?</h3>
+      <blockquote>${escapeHtml(update.value)}</blockquote>
+      <p>Nothing has been added to household memory yet.</p>
+      <div class="preference-approval-actions">
+        <button class="primary-button" type="button" data-action="save-preference">Save preference</button>
+        <button class="secondary-button" type="button" data-action="reject-preference">Don’t save</button>
+        <button class="secondary-button" type="button" data-action="edit-preference">Edit</button>
+        <button class="secondary-button" type="button" data-action="question-preference">Ask a question</button>
+      </div>
+    </section>`;
   }
 
   function detailMarkup(state, recommendation) {
@@ -749,6 +809,7 @@
             <summary>More</summary>
             <div>
               <button type="button" data-eval-action="rejudge-results" ${model.hasRejudgeableResults && canRun ? "" : "disabled"}>Rejudge saved outputs</button>
+              <button type="button" data-eval-action="export-regressions" ${model.regressionCandidateCount ? "" : "disabled"}>Export regression drafts (${escapeHtml(model.regressionCandidateCount || 0)})</button>
               ${model.promptApproved ? `<button type="button" data-eval-action="revoke-approval">Revoke instructions approval</button>` : ""}
             </div>
           </details>
@@ -773,6 +834,7 @@
               <div class="eval-case-heading-actions">
                 <span class="eval-verdict ${escapeHtml(selectedVerdict)}">${isSelectedRunning ? "Running…" : escapeHtml(verdictLabel(selectedVerdict))}</span>
                 <button class="eval-case-run" type="button" data-eval-action="run-case" data-eval-id="${escapeHtml(selectedItem.eval_id)}" ${canRunSelected ? "" : "disabled"}>${selectedResult ? "Run case again" : "Run this case"}</button>
+                ${["fail", "error"].includes(selectedVerdict) ? `<button class="eval-case-run" type="button" data-eval-action="capture-regression" data-eval-id="${escapeHtml(selectedItem.eval_id)}">${model.selectedRegressionCaptured ? "Regression draft saved" : "Create regression case"}</button>` : ""}
               </div>
             </div>
             <details class="eval-case-definition"${selectedResult ? "" : " open"}>
@@ -866,6 +928,22 @@
         : "No additional viewing preference recorded";
       return `<tr><th scope="row">${escapeHtml(member.name)}</th><td>${escapeHtml((member.preferences || []).join(", "))}</td><td>${escapeHtml(preferenceNote)}</td></tr>`;
     });
+    const savedPreferenceRows = (state.familyRules.preferenceNotes || []).map(item => {
+      const savedDate = /^\d{4}-\d{2}-\d{2}/.test(String(item.timestamp || ""))
+        ? engine.displayDate(String(item.timestamp).slice(0, 10), state.household.locale)
+        : "Date not recorded";
+      const scope = item.scope === "permanent"
+        ? "Ongoing · future recommendations"
+        : String(item.scope || "Recorded preference").replaceAll("_", " ");
+      return `<tr><td><strong>${escapeHtml(item.preference)}</strong></td><td>${escapeHtml(scope)}</td><td>${escapeHtml(savedDate)}</td></tr>`;
+    });
+    const savedPreferencesMarkup = savedPreferenceRows.length
+      ? table(
+          "Adult-approved household preferences",
+          ["Saved household preference", "Applies to", "Saved"],
+          savedPreferenceRows
+        )
+      : `<p>No additional adult-approved household preferences have been saved.</p>`;
     const adsPreference = state.household.advertisingTolerance === "limited"
       ? "A limited number of ads is acceptable, but the family prefers fewer interruptions."
       : state.household.advertisingTolerance === "none"
@@ -1032,7 +1110,8 @@
       ${collapsibleCard(
         "Household preferences and rules",
         "Plan preferences, family viewing priorities, and age-specific viewing restrictions.",
-        `<div class="household-summary"><div><span>Household preferences</span><p>${escapeHtml(picturePreference)}<br>${escapeHtml(adsPreference)}<br>${escapeHtml(authorizedAdult?.name || "The authorized adult")} makes final subscription decisions.</p></div><div><span>Current family rules</span><p>High-priority titles matter most, while viewing restrictions and subscription terms still apply. Financial limits and history are shown in the Spending tab.</p></div></div>
+        `<div class="context-section-group"><h4>Saved household preferences</h4><p>These preferences were explicitly approved by the authorized adult and guide future recommendations.</p>${savedPreferencesMarkup}</div>
+        <div class="household-summary"><div><span>Household preferences</span><p>${escapeHtml(picturePreference)}<br>${escapeHtml(adsPreference)}<br>${escapeHtml(authorizedAdult?.name || "The authorized adult")} makes final subscription decisions.</p></div><div><span>Current family rules</span><p>High-priority titles matter most, while viewing restrictions and subscription terms still apply. Financial limits and history are shown in the Spending tab.</p></div></div>
         <div class="context-section-group"><h4>Viewing preferences by family member</h4>${table("Viewing preferences by family member", ["Family member", "Enjoys watching", "Other preference"], preferenceRows)}</div>
         <div class="context-section-group"><h4>Viewing restrictions</h4>${table("Viewing restrictions by family member", ["Family member", "Viewing restriction"], restrictionRows)}</div>`
       )}
@@ -1048,6 +1127,8 @@
     escapeHtml,
     welcomeMarkup,
     messageMarkup,
+    feedbackMarkup,
+    preferenceApprovalMarkup,
     detailMarkup,
     progressMarkup,
     llmActivityMarkup,
