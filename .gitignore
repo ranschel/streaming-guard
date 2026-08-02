@@ -1,19 +1,22 @@
 # Local operating metadata
 .DS_Store
 **/.DS_Store
+Thumbs.db
 .agents/
 .codex/
 .openai/
+.idea/
+.vscode/
+*.code-workspace
 AGENTS.md
 sources/
 
-# Local synchronization and work records
+# Local synchronization, work records, roadmaps, and planning
 build/sync-project.sh
-todo/project_sync.md
-todo/project_time_log.md
-
-# Private production planning
-todo/streaming_guard_production_fast_follows.md
+todo/
+**/*roadmap*
+**/*fast_follow*
+**/*fast-follow*
 deploy-companion/
 mockups/
 
@@ -21,12 +24,38 @@ mockups/
 .env
 .env.*
 !.env.example
+.envrc
 *.local
+*.local.*
+secrets/
+credentials*.json
+service-account*.json
+*.key
+*.pem
+*.p12
+*.pfx
 
 # Local runtime and exported artifacts
 *.log
 *.jsonl
+*.har
+*.pid
+*.tmp
+*.bak
+*.orig
+*.rej
+*.swp
+*.swo
+*~
+.cache/
+.nyc_output/
+coverage/
+node_modules/
+.npm/
+.pnpm-store/
 browser_state/
 evaluation_exports/
 exports/
 deployment/dist/
+tests/reports/*.json
+!tests/reports/.gitkeep

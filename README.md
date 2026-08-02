@@ -58,7 +58,7 @@ The Evals view contains the ten-case evaluation runner. The first five cases pre
 No installation, package manager, build step, or local server is required.
 
 1. Download or clone this repository.
-2. Keep `index.html`, `assets/`, `css/`, and `js/` together.
+2. Keep `index.html`, `assets/`, `css/`, `js/`, and `tests/runtime/` together.
 3. Double-click `index.html`.
 4. Select **Run daily background sweep** or **Review a new subscription request** to begin a demo story.
 
@@ -92,10 +92,14 @@ The CSV, JSON, policy, and LLM-instruction files remain the editable sources of 
 ├── assets/
 │   └── streaming-guard-shield-256.png
 ├── css/
+│   ├── context-trace.css
+│   ├── progress-loop.css
 │   └── streaming-guard.css
 ├── js/
 │   ├── agent-tools.js
 │   ├── app.js
+│   ├── context-selector.js
+│   ├── feedback-manager.js
 │   ├── household-context.js
 │   ├── knowledge-base.js
 │   ├── memory-store.js
@@ -146,11 +150,10 @@ The CSV, JSON, policy, and LLM-instruction files remain the editable sources of 
 │   │   ├── context-search-benchmark.mjs
 │   │   ├── run-quality-gates.mjs
 │   │   ├── verify-component-quality.mjs
+│   │   ├── verify-feedback-regression-loop.mjs
+│   │   ├── verify-project-structure.mjs
 │   │   └── verify-keep-only.mjs
-│   ├── reports/
-│   │   ├── component_quality_results.json
-│   │   ├── context_search_benchmark_results.json
-│   │   └── deterministic_quality_summary.json
+│   ├── reports/                    # generated locally and ignored by Git
 │   └── results/
 │       ├── final_evaluation_results.md
 │       └── final_evaluation_summary.md
@@ -160,11 +163,11 @@ The CSV, JSON, policy, and LLM-instruction files remain the editable sources of 
 │   └── dist/
 │       └── server/
 │           └── index.js
-├── prd/
-│   └── streaming_guard_prd.md
-└── todo/
-    └── streaming_guard_fast_follows.md
+└── prd/
+    └── streaming_guard_prd.md
 ```
+
+`js/knowledge-base.js`, `deployment/dist/`, and the JSON files in `tests/reports/` are generated artifacts. Internal QA scripts and reports are deliberately excluded from the deploy bundle; the browser receives only its runtime evaluation assets and the final human-reviewable evaluation evidence. Local synchronization records, the work log, and the private production backlog are excluded from GitHub by `.gitignore`.
 
 ## Data and memory model
 
@@ -201,7 +204,7 @@ Before every model request, the context selector creates and validates a `Contex
 
 The repeatable context-search benchmark contains 126 labeled keyword, semantic, mixed, negative, held-out, and portfolio-comparison queries. The current implementation passes 126 of 126 cases (100%), exceeding the 95% target. Broad comparative savings requests retrieve the active subscription portfolio and its relevant plan, contract, watchlist, viewing, and budget records; entity-specific questions remain focused, and unrelated savings questions retrieve no household context. Run the benchmark with `node tests/scripts/context-search-benchmark.mjs --require=95`; the machine-readable result is saved to `tests/reports/context_search_benchmark_results.json`.
 
-Run `node tests/scripts/run-quality-gates.mjs` for the complete deterministic release gate. It executes the dedicated feedback and regression-capture workflow suite, 93 focused component assertions across memory, financial math, safety and validation, workflow, provider configuration, and UI contracts; the 126-case context benchmark; and the full cross-component regression. All deterministic gates must pass at 100%. Machine-readable results are written to `tests/reports/feedback_regression_loop_results.json`, `tests/reports/component_quality_results.json`, `tests/reports/context_search_benchmark_results.json`, and `tests/reports/deterministic_quality_summary.json`.
+Run `node tests/scripts/run-quality-gates.mjs` for the complete deterministic release gate. It verifies project structure and publication boundaries; executes the dedicated feedback and regression-capture workflow suite; runs 93 focused component assertions across memory, financial math, safety and validation, workflow, provider configuration, and UI contracts; runs the 126-case context benchmark; and completes the cross-component regression. All deterministic gates must pass at 100%. Machine-readable results are written to `tests/reports/project_structure_results.json`, `tests/reports/feedback_regression_loop_results.json`, `tests/reports/component_quality_results.json`, `tests/reports/context_search_benchmark_results.json`, and `tests/reports/deterministic_quality_summary.json`.
 
 Run `node tests/scripts/verify-feedback-regression-loop.mjs --live` to exercise the feedback-learning contract against a real configured provider. The test selects the first available credential from `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`, uses fictional household data only, and writes a separate `tests/reports/feedback_regression_loop_live_results.json` report. Credential failures are classified as infrastructure blocks and stop the live run immediately; they do not overwrite the deterministic baseline. Live model quality remains a separate probabilistic gate: repeat the ten-case evaluation runner enough times to measure the selected agent and judge models, and require at least 95% of model-driven cases to pass.
 
@@ -263,7 +266,7 @@ The instruction architecture has one agent-global layer, two agent task add-ons,
 - Conversation requests add the conversation task instructions.
 - Evaluation judgments use only the separate evaluation-judge instruction, the fixed case, expected behavior, deterministic check results, and complete model output.
 
-The Evals view shows six numbered sections that map one-to-one to six Markdown files in `instructions/`. The displayed text is the exact file content; no hidden instruction text is appended in JavaScript. Each section can be expanded in the instruction drawer or opened by itself in a full-screen reader for detailed review. At runtime, the application assembles either **sections 1–3 + section 4** for a recommendation or **sections 1–3 + section 5** for a conversation. Section 6 governs the independent judge call. Approval is tied to a fingerprint containing all six instruction strings and all ten case definitions.
+The Evals view shows six numbered sections that map one-to-one to five agent instruction files in `instructions/` plus the independent judge file in `tests/instructions/`. The displayed text is the exact file content; no hidden instruction text is appended in JavaScript. Each section can be expanded in the instruction drawer or opened by itself in a full-screen reader for detailed review. At runtime, the application assembles either **sections 1–3 + section 4** for a recommendation or **sections 1–3 + section 5** for a conversation. Section 6 governs the independent judge call. Approval is tied to a fingerprint containing all six instruction strings and all ten case definitions.
 
 The project contains a broader case library for later testing, including migration timing, budget conflicts, content-rating boundaries, stale data, annual-plan constraints, and no-action restraint.
 
@@ -281,7 +284,6 @@ Automated verdicts report only what the five explicit checks establish for each 
 - [Final Evaluation Summary](tests/results/final_evaluation_summary.md)
 - [Complete Final Evaluation Results](tests/results/final_evaluation_results.md)
 - [Household rules](policies/family_rules.md)
-- [Prototype fast-follow tracker](todo/streaming_guard_fast_follows.md)
 
 ## Known prototype limitations
 
@@ -311,7 +313,7 @@ See GitHub’s official [publishing-source documentation](https://docs.github.co
 
 The final current ten-case hybrid evaluation completed under prompt hash `05971ddc`: all ten cases passed with zero failures, API errors, or material judge gaps. Nine cases used `gpt-5.6-terra` for the agent response and `gpt-5.6-luna` for independent judging; EVAL-07 used the shared deterministic signal detector and made no provider call. The set covers cancellation, missing information, bundle economics, execution refusal, catalog migration, billing escalation, shared-detector no-action restraint, subscription timing, duration-aware pause, and child-rating exceptions.
 
-The [prototype fast-follow tracker](todo/streaming_guard_fast_follows.md) is closed, the Develop phase is complete, and the final current evaluation passed all ten cases. Production infrastructure, integrations, monitoring, and decision-quality gaps are maintained separately in a private backlog that is intentionally excluded from GitHub publishing.
+The Develop phase is complete and the final current evaluation passed all ten cases. Prototype and production roadmaps, fast-follow trackers, local work records, and private planning documents are intentionally excluded from GitHub publishing.
 
 ---
 

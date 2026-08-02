@@ -3,6 +3,11 @@ import fs from "node:fs";
 
 const gates = [
   {
+    id: "project_structure",
+    label: "Project structure and publication boundaries",
+    args: ["tests/scripts/verify-project-structure.mjs"]
+  },
+  {
     id: "feedback_regression_loop",
     label: "Feedback and regression loop",
     args: ["tests/scripts/verify-feedback-regression-loop.mjs"]
@@ -49,12 +54,20 @@ const feedbackReport = JSON.parse(
 const contextReport = JSON.parse(
   fs.readFileSync("tests/reports/context_search_benchmark_results.json", "utf8")
 );
+const structureReport = JSON.parse(
+  fs.readFileSync("tests/reports/project_structure_results.json", "utf8")
+);
 const report = {
   startedAt,
   completedAt: new Date().toISOString(),
   testType: "streaming_guard_deterministic_quality_gates",
   targetSuccessRate: 100,
   passed: results.every(result => result.passed),
+  projectStructure: {
+    passed: structureReport.passed,
+    total: structureReport.total,
+    successRate: structureReport.successRate
+  },
   feedbackRegressionLoop: {
     passed: feedbackReport.passed,
     total: feedbackReport.total,
@@ -88,6 +101,7 @@ results.forEach(result => {
 });
 console.log(
   `Deterministic quality gates: ${report.passed ? "PASS" : "FAIL"} · ` +
+  `${report.projectStructure.passed}/${report.projectStructure.total} structure checks · ` +
   `${report.componentAssertions.passed}/${report.componentAssertions.total} component assertions · ` +
   `${report.contextRetrieval.passed}/${report.contextRetrieval.total} context cases.`
 );

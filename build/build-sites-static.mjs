@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outputRoot = path.join(projectRoot, "deployment", "dist");
 const serverRoot = path.join(outputRoot, "server");
-const publishedRoots = [
+const publishedPaths = [
   "index.html",
   "README.md",
   "assets",
@@ -15,7 +15,19 @@ const publishedRoots = [
   "js",
   "policies",
   "prd",
-  "tests"
+  "tests/fixtures",
+  "tests/instructions",
+  "tests/results",
+  "tests/runtime"
+];
+
+const privateOrGeneratedPrefixes = [
+  "build/",
+  "deployment/",
+  "sources/",
+  "tests/reports/",
+  "tests/scripts/",
+  "todo/"
 ];
 
 function filesUnder(relativePath) {
@@ -23,10 +35,17 @@ function filesUnder(relativePath) {
   const stat = fs.statSync(absolutePath);
   if (stat.isFile()) return [relativePath];
   return fs.readdirSync(absolutePath, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name))
     .flatMap(entry => filesUnder(path.join(relativePath, entry.name)));
 }
 
-const files = publishedRoots.flatMap(filesUnder);
+const files = publishedPaths.flatMap(filesUnder).sort();
+const accidentallyPublished = files.filter(relativePath =>
+  privateOrGeneratedPrefixes.some(prefix => relativePath.startsWith(prefix))
+);
+if (accidentallyPublished.length) {
+  throw new Error(`Private or generated files entered the public bundle: ${accidentallyPublished.join(", ")}`);
+}
 const encodedFiles = Object.fromEntries(files.map(relativePath => [
   `/${relativePath.split(path.sep).join("/")}`,
   fs.readFileSync(path.join(projectRoot, relativePath)).toString("base64")
