@@ -14,6 +14,7 @@ sources/
 # Local synchronization, work records, roadmaps, and planning
 build/sync-project.sh
 todo/
+prd/streaming_guard_deploy_prd.md
 **/*roadmap*
 **/*fast_follow*
 **/*fast-follow*
