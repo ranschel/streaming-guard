@@ -6,8 +6,8 @@
 
 **10 of 10 cases passed.**
 
-- **Prompt hash:** `05971ddc`
-- **Run completed:** July 29, 2026 at 12:01 PM PDT
+- **Prompt hash:** `89d3ee9f`
+- **Run completed:** August 3, 2026 at approximately 11:33 PM PDT
 - **Agent model:** `gpt-5.6-terra`
 - **Independent judge model:** `gpt-5.6-luna`
 - **Passed:** 10
@@ -66,4 +66,4 @@ The evaluation cycle produced documented improvements to:
 - schedule future subscriptions one day before release without ever recommending a start date in the past; and
 - distinguish a selected pause’s calendar duration, maximum permitted duration, avoided billing cycles, and required return date.
 
-The final current run was completed after the context-selection, live-trace, memory-architecture, and instruction-cleanup refinements. It confirms that removing JavaScript field mappings from the instruction prose introduced no regression across the ten-case set. All model-driven cases passed structured validation, expected status and action checks, semantic-rubric assessment, and human-control assessment. Every judge result reported an empty `gaps` array.
+The final current run was completed after the context-selection, live-trace, memory-architecture, instruction-cleanup, feedback, free-text-routing, lasting-preference-approval, regression-capture, hybrid-retrieval, and audience-language refinements. All model-driven cases passed structured validation, expected status and action checks, semantic-rubric assessment, and human-control assessment. Every judge result reported an empty `gaps` array.
