@@ -857,6 +857,49 @@ await test("safety_validation", "execution refusal requires four complete sectio
   ), /all four required/);
 });
 
+await test("safety_validation", "valid execution refusal retains the execution-request turn type", () => {
+  const candidate = validConversation({
+    reply: "I cannot complete that external subscription for you.",
+    turnType: "execution_request",
+    safetyDisposition: "execution_refused",
+    nextExpectedInput: "external_action_confirmation",
+    refusalSections: {
+      yourRequest: "Subscribe to Summit+ for me.",
+      myResponse: "I cannot complete subscriptions or change external accounts.",
+      whyRefusing: "Streaming Guard is advisory only and cannot access accounts or make payments.",
+      whatYouCanDoNext: "Please subscribe through the service yourself and confirm afterward."
+    },
+    reasonCodes: ["external_action_requested"]
+  });
+  assert.doesNotThrow(() => client.validateConversationResponse(
+    candidate,
+    null,
+    decisionPacket("SG-003"),
+    context.createSeedState("SG-003")
+  ));
+});
+
+await test("safety_validation", "execution refusal cannot be mislabeled as safety escalation", () => {
+  const candidate = validConversation({
+    reply: "I cannot complete that external subscription for you.",
+    turnType: "safety_escalation",
+    safetyDisposition: "execution_refused",
+    refusalSections: {
+      yourRequest: "Subscribe to Summit+ for me.",
+      myResponse: "I cannot complete subscriptions or change external accounts.",
+      whyRefusing: "Streaming Guard is advisory only and cannot access accounts or make payments.",
+      whatYouCanDoNext: "Please subscribe through the service yourself and confirm afterward."
+    },
+    reasonCodes: ["external_action_requested"]
+  });
+  assert.throws(() => client.validateConversationResponse(
+    candidate,
+    null,
+    decisionPacket("SG-003"),
+    context.createSeedState("SG-003")
+  ), /Execution refusal is valid only for an execution request/);
+});
+
 await test("safety_validation", "billing escalation requires a validated support URL", () => {
   const candidate = validConversation({
     reply: "Please contact the provider.",
@@ -870,6 +913,48 @@ await test("safety_validation", "billing escalation requires a validated support
     decisionPacket("SG-013"),
     context.createSeedState("SG-013")
   ), /validated support URL/);
+});
+
+await test("safety_validation", "valid billing escalation carries no final subscription action", () => {
+  const candidate = validConversation({
+    reply: "You reported a duplicate CivicLive charge. I cannot cancel the account, request a refund, or handle the dispute. Please contact CivicLive at https://www.civiclive.com/support.",
+    turnType: "safety_escalation",
+    discussionStatus: "open",
+    outcome: "none",
+    finalAction: "none",
+    externalActionRequired: false,
+    recommendationEffect: "unchanged",
+    safetyDisposition: "billing_or_legal_escalation",
+    nextExpectedInput: "none",
+    reasonCodes: ["billing_or_legal_issue"]
+  });
+  assert.doesNotThrow(() => client.validateConversationResponse(
+    candidate,
+    null,
+    decisionPacket("SG-013"),
+    context.createSeedState("SG-013")
+  ));
+});
+
+await test("safety_validation", "billing escalation cannot become an adult-judgment final action", () => {
+  const candidate = validConversation({
+    reply: "You reported a duplicate CivicLive charge. Please contact CivicLive at https://www.civiclive.com/support.",
+    turnType: "safety_escalation",
+    discussionStatus: "open",
+    outcome: "none",
+    finalAction: "request_adult_judgment",
+    externalActionRequired: false,
+    recommendationEffect: "unchanged",
+    safetyDisposition: "billing_or_legal_escalation",
+    nextExpectedInput: "none",
+    reasonCodes: ["billing_or_legal_issue"]
+  });
+  assert.throws(() => client.validateConversationResponse(
+    candidate,
+    null,
+    decisionPacket("SG-013"),
+    context.createSeedState("SG-013")
+  ), /infeasible conversational action|open discussion cannot contain/i);
 });
 
 await test("safety_validation", "unsupported URL in conversation is rejected", () => {

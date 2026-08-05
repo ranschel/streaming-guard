@@ -680,7 +680,7 @@
           "safety_escalation",
           "out_of_scope"
         ],
-        description: "Classify the semantic purpose: answer for an ordinary question; clarification_request when required information is missing; new_information for an explicit household fact or independently completed change; recommendation_decision for an explicit decision about the displayed recommendation; execution_request for a request that the agent perform an external action; safety_escalation for a protected escalation; out_of_scope for unrelated content."
+        description: "Classify the semantic purpose: answer for an ordinary question; clarification_request when required information is missing; new_information for an explicit household fact or independently completed change; recommendation_decision for an explicit decision about the displayed recommendation; execution_request for every pure request that the agent perform an external action, including when that execution must be refused; safety_escalation only for a protected sensitive-information, billing, fraud, refund, legal, or account-issue escalation and never for a pure execution request; out_of_scope for unrelated content."
       },
       discussionStatus: {
         type: "string",
@@ -695,7 +695,7 @@
       finalAction: {
         type: "string",
         enum: ["none", "cancel", "pause", "subscribe", "keep", "request_adult_judgment"],
-        description: "The action explicitly accepted or selected by the adult. Use none while the discussion remains unresolved."
+        description: "The subscription action explicitly accepted or selected by the adult. Use none while the discussion remains unresolved and for every refusal, protected safety escalation, out-of-scope response, ordinary answer, or clarification. In particular, a billing, fraud, refund, legal, credential, or account-issue escalation must use none and must never use request_adult_judgment as its final action."
       },
       externalActionRequired: {
         type: "boolean",

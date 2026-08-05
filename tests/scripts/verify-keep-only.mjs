@@ -73,6 +73,14 @@ const instructionSource = fs.readdirSync("instructions")
   .map(file => fs.readFileSync(`instructions/${file}`, "utf8"))
   .join("\n");
 
+assert(instructionSource.includes("classify the turn as an execution request and the response as an execution refusal"));
+assert(instructionSource.includes("Do not classify a pure execution request as a safety escalation"));
+assert(clientSource.includes("including when that execution must be refused"));
+assert(clientSource.includes("never for a pure execution request"));
+assert(instructionSource.includes("A protected safety escalation is not a subscription recommendation or an adult decision"));
+assert(instructionSource.includes("Treat the escalation as having no final subscription action"));
+assert(clientSource.includes("a billing, fraud, refund, legal, credential, or account-issue escalation must use none"));
+
 [
   "turnType",
   "discussionStatus",
