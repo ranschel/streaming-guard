@@ -2178,6 +2178,19 @@ await runSuite(
   });
   roleRunner.approvePromptReview();
   await roleRunner.runAll();
+  const priorFullRunCompletedAt = roleRunner.model().lastFullRunCompletedAt;
+  const replacementFullRun = roleRunner.runAll();
+  assert.equal(roleRunner.model().runningAll, true);
+  assert.equal(roleRunner.model().counts.not_run, 10, "Starting a full run must reset every prior case status immediately.");
+  assert.equal(roleRunner.model().hasCurrentResults, false, "Starting a full run must hide every prior case result.");
+  assert.equal(
+    roleRunner.model().lastFullRunCompletedAt,
+    priorFullRunCompletedAt,
+    "Starting a new run must preserve the timestamp of the last completed full run until its replacement finishes."
+  );
+  await replacementFullRun;
+  assert.equal(roleRunner.model().counts.pass, 10);
+  assert.notEqual(roleRunner.model().lastFullRunCompletedAt, null);
   selectedRoles = { ...selectedRoles, judgeModel: "gpt-5.6-sol" };
   assert.equal(roleRunner.model().promptApproved, false);
   assert.equal(roleRunner.model().counts.not_run, 10);

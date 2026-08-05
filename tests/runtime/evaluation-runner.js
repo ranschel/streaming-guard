@@ -522,6 +522,8 @@
       }
       const signal = beginRun();
       let completedCaseCount = 0;
+      saved.results = {};
+      persist();
       runningAll = true;
       onChange();
       try {
