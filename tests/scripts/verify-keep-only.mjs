@@ -611,6 +611,9 @@ assert(knowledge.recommendationAddon.includes("Use avoided billing cycles only t
 assert(client.recommendationSchema().required.includes("selectedPauseDurationDays"));
 assert(client.recommendationSchema().required.includes("maximumPauseDays"));
 assert(client.recommendationSchema().required.includes("avoidedBillingCycles"));
+assert(client.recommendationSchema().properties.reminderHeadline.description.includes("record remains unchanged until the adult confirms completing the external action"));
+assert(client.recommendationSchema().properties.reminderHeadline.description.includes("Do not use this field for a future-release reminder"));
+assert(client.recommendationSchema().properties.reminderDetails.description.includes("updates the subscription record only after the adult confirms completing the external action"));
 assert(clientSource.includes("This is not the calendar duration."));
 assert(knowledge.conversationAddon.includes("briefly restate the material issue the adult reported"));
 assert(knowledge.conversationAddon.includes("General frustration, annoyance, or anger"));

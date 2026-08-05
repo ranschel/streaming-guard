@@ -588,8 +588,8 @@
       decisionDetails: stringField("Optional clarification about genuinely missing information or approval; use an empty string when adult judgment is not required."),
       nextHeadline: stringField("The prominent manual next step, addressed directly to the authorized adult as you. Use polite recommendation language such as 'If you agree, please'; never use 'must' or the adult's name."),
       nextDetails: stringField("Friendly supporting detail for the manual next step, addressed as you; use an empty string when none is needed."),
-      reminderHeadline: stringField("The prominent household-record reminder."),
-      reminderDetails: stringField("Supporting detail for the reminder; use an empty string when none is needed.")
+      reminderHeadline: stringField("The prominent household-record consequence. For Subscribe, Cancel, or Pause, reserve this field exclusively for a clear statement that the subscription record remains unchanged until the adult confirms completing the external action. Do not use this field for a future-release reminder or another general reminder. For Keep or Adult judgment required, state the applicable current record consequence."),
+      reminderDetails: stringField("Supporting detail for the household-record consequence. For Subscribe, Cancel, or Pause, explicitly explain that the application updates the subscription record only after the adult confirms completing the external action. Put any future-release reminder elsewhere in the recommendation. Use an empty string only when no supporting detail is needed.")
     };
     return {
       type: "object",

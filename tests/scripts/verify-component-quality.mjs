@@ -1013,6 +1013,19 @@ await test("provider_ui", "all structured schemas are strict objects", () => {
   }
 });
 
+await test("provider_ui", "external-action recommendation fields preserve the record confirmation gate", () => {
+  const schema = client.recommendationSchema();
+  assert(schema.properties.reminderHeadline.description.includes(
+    "record remains unchanged until the adult confirms completing the external action"
+  ));
+  assert(schema.properties.reminderHeadline.description.includes(
+    "Do not use this field for a future-release reminder"
+  ));
+  assert(schema.properties.reminderDetails.description.includes(
+    "updates the subscription record only after the adult confirms completing the external action"
+  ));
+});
+
 await test("provider_ui", "responsive top-level views and chat controls exist", () => {
   const markup = fs.readFileSync("index.html", "utf8");
   for (const id of [
