@@ -34,13 +34,22 @@
   function readSaved(storage) {
     try {
       const parsed = JSON.parse(storage.getItem(STORAGE_KEY) || "{}");
+      const results = parsed.results && typeof parsed.results === "object" ? parsed.results : {};
+      const legacyFullRunCompletedAt = INITIAL_EVAL_IDS.every(evalId => results[evalId]?.completedAt)
+        ? INITIAL_EVAL_IDS
+          .map(evalId => results[evalId].completedAt)
+          .sort((left, right) => new Date(right) - new Date(left))[0]
+        : null;
       return {
         approvedHash: typeof parsed.approvedHash === "string" ? parsed.approvedHash : null,
         approvedAt: typeof parsed.approvedAt === "string" ? parsed.approvedAt : null,
-        results: parsed.results && typeof parsed.results === "object" ? parsed.results : {}
+        lastFullRunCompletedAt: typeof parsed.lastFullRunCompletedAt === "string"
+          ? parsed.lastFullRunCompletedAt
+          : legacyFullRunCompletedAt,
+        results
       };
     } catch (_) {
-      return { approvedHash: null, approvedAt: null, results: {} };
+      return { approvedHash: null, approvedAt: null, lastFullRunCompletedAt: null, results: {} };
     }
   }
 
@@ -512,6 +521,7 @@
         throw new Error("Connect the providers required by the selected agent and judge models before running evaluations.");
       }
       const signal = beginRun();
+      let completedCaseCount = 0;
       runningAll = true;
       onChange();
       try {
@@ -539,10 +549,15 @@
               judgeProvider: error.judgeProvider || null
             };
           }
+          completedCaseCount += 1;
           persist();
           onChange();
         }
       } finally {
+        if (!stopRequested && completedCaseCount === cases.length) {
+          saved.lastFullRunCompletedAt = clock();
+          persist();
+        }
         finishRun();
         onChange();
       }
@@ -578,6 +593,7 @@
         prompts: promptBundle(),
         promptHash: currentHash(),
         instructionsUpdatedAt: knowledge.instructionBundleUpdatedAt,
+        lastFullRunCompletedAt: saved.lastFullRunCompletedAt,
         promptApproved: promptApproved(),
         approvedAt: saved.approvedAt,
         connected: openAI.selectedModelsConfigured(settings),
@@ -669,6 +685,7 @@
         "# Streaming Guard Evaluation Results",
         "",
         `Current prompt hash: ${currentHash()}`,
+        `Last complete 10-case run: ${saved.lastFullRunCompletedAt || "not recorded"}`,
         `Exported: ${clock()}`,
         ""
       ];
@@ -760,7 +777,7 @@
       },
       reset() {
         if (runningEvalId || runningAll) throw new Error("Wait for the current evaluation to finish.");
-        saved = { approvedHash: null, approvedAt: null, results: {} };
+        saved = { approvedHash: null, approvedAt: null, lastFullRunCompletedAt: null, results: {} };
         storage.removeItem(STORAGE_KEY);
         return model();
       },

@@ -793,11 +793,14 @@
 
     return `<div class="evaluation-runner">
       <section class="eval-command-bar" aria-label="Evaluation controls">
-        <div class="eval-score-chips" aria-label="Evaluation results">
-          <span class="pass"><strong>${escapeHtml(model.counts.pass)}</strong> passed</span>
-          <span class="fail"><strong>${escapeHtml(model.counts.fail)}</strong> failed</span>
-          <span class="error"><strong>${escapeHtml(model.counts.error)}</strong> errors</span>
-          <span><strong>${escapeHtml(model.counts.not_run)}</strong> not run</span>
+        <div class="eval-results-summary">
+          <div class="eval-score-chips" aria-label="Evaluation results">
+            <span class="pass"><strong>${escapeHtml(model.counts.pass)}</strong> passed</span>
+            <span class="fail"><strong>${escapeHtml(model.counts.fail)}</strong> failed</span>
+            <span class="error"><strong>${escapeHtml(model.counts.error)}</strong> errors</span>
+            <span><strong>${escapeHtml(model.counts.not_run)}</strong> not run</span>
+          </div>
+          <p class="eval-last-run-completed"><strong>Last complete 10-case run:</strong> ${model.lastFullRunCompletedAt ? escapeHtml(dateTime(model.lastFullRunCompletedAt)) : "Not yet completed"}</p>
         </div>
         <div class="eval-toolbar-actions">
           ${running

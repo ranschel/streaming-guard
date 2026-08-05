@@ -2752,6 +2752,18 @@
       gap: 12px;
       flex-wrap: wrap;
     }
+    .eval-results-summary {
+      min-width: 0;
+      display: grid;
+      gap: 6px;
+    }
+    .eval-last-run-completed {
+      margin: 0 3px;
+      color: var(--color-ash);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .eval-last-run-completed strong { color: var(--color-cloud-white); }
     .eval-score-chips > span {
       min-width: 132px;
       min-height: 66px;
@@ -3185,6 +3197,7 @@
         overflow-x: auto;
         flex-wrap: nowrap;
       }
+      .eval-results-summary { width: 100%; }
       .eval-results-workspace {
         grid-template-columns: minmax(0, 1fr);
         grid-template-rows: auto minmax(0, 1fr);

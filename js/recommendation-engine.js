@@ -29,6 +29,14 @@
       : dayBeforeRelease;
   }
 
+  function recommendedCancellationDeadlineDate(state, subscription = targetSubscription(state)) {
+    if (!subscription?.nextRenewal) return null;
+    const dayBeforeRenewal = math.addDays(subscription.nextRenewal, -1);
+    return state.systemDate && dayBeforeRenewal < state.systemDate
+      ? state.systemDate
+      : dayBeforeRenewal;
+  }
+
   function memberById(state, memberId) {
     return state.members.find(member => member.id === memberId);
   }
@@ -376,6 +384,9 @@
     const judgmentReasons = adultJudgmentReasons(state);
     const actions = allowedDecisionActions(state);
     const activePauseWindow = pauseWindow(state, subscription);
+    const cancellationDeadlineDate = actions.includes("cancel")
+      ? recommendedCancellationDeadlineDate(state, subscription)
+      : null;
     const actionFinancialImpacts = Object.fromEntries(actions.map(action => {
       const impact = planImpactForAction(state, action);
       const {
@@ -416,6 +427,9 @@
         : null,
       recommendedAccessStartDate(state)
         ? displayDate(recommendedAccessStartDate(state), state.household.locale)
+        : null,
+      cancellationDeadlineDate
+        ? displayDate(cancellationDeadlineDate, state.household.locale)
         : null,
       ...(state.scenario.supportingPriorityTitles || []).map(title =>
         title.availabilityDate ? displayDate(title.availabilityDate, state.household.locale) : null
@@ -529,6 +543,15 @@
           ? displayDate(recommendedAccessStartDate(state), state.household.locale)
           : null,
         releasePattern: state.scenario.nextReleasePattern || null
+      },
+      actionTiming: {
+        cancellationDeadlineDate,
+        cancellationDeadlineDateDisplay: cancellationDeadlineDate
+          ? displayDate(cancellationDeadlineDate, state.household.locale)
+          : null,
+        cancellationTimingBasis: cancellationDeadlineDate
+          ? "Complete cancellation no later than the day before the confirmed renewal date to avoid the next charge."
+          : null
       },
       pauseWindow: {
         ...activePauseWindow,
@@ -689,6 +712,7 @@
     targetSubscription,
     viewerName,
     displayDate,
+    recommendedCancellationDeadlineDate,
     formatMoney
   });
 })(window);

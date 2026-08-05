@@ -1853,7 +1853,9 @@ async function runSuite(
   });
   runner.approvePromptReview();
   const results = await runner.runAll();
+  assert(runner.model().lastFullRunCompletedAt, `${label}: full-run completion time was not recorded`);
   const exportText = runner.exportResultsText();
+  assert(exportText.includes("Last complete 10-case run:"), `${label}: copied report omitted the full-run completion time`);
   for (const evalId of ["EVAL-01", "EVAL-02", "EVAL-03", "EVAL-04", "EVAL-05", "EVAL-06", "EVAL-07", "EVAL-08", "EVAL-09", "EVAL-10"]) {
     assert(exportText.includes(`## ${evalId}`), `${label}: copied report omitted ${evalId}`);
   }
@@ -1893,6 +1895,7 @@ async function runSuite(
   assert(evaluationMarkup.includes("Human-readable output"), `${label}: readable output column was not rendered`);
   assert(!evaluationMarkup.includes('class="eval-compact-stepper"'), `${label}: obsolete staged workflow was rendered`);
   assert(evaluationMarkup.includes('class="eval-score-chips"'), `${label}: results dashboard was not rendered`);
+  assert(evaluationMarkup.includes('class="eval-last-run-completed"'), `${label}: last full-run completion time was not rendered`);
   assert(evaluationMarkup.includes('data-eval-action="run-all"'), `${label}: run-all action was not rendered`);
   assert(evaluationMarkup.includes('data-eval-action="copy-all-results"'), `${label}: copy-output action was not rendered`);
   assert(evaluationMarkup.includes('data-eval-action="clear-results"'), `${label}: clear-results action was not rendered`);
@@ -2074,6 +2077,18 @@ await runSuite(
   const cancellationScenario = knowledge.agentEvals.find(record => record.case_id === "SG-001");
   context.rebaseStateDates(cancellationState, cancellationScenario.system_date);
   const cancellationPacket = engine.buildDecisionPacket(cancellationState);
+  assert.equal(cancellationPacket.actionTiming.cancellationDeadlineDate, "2026-08-20");
+  assert.equal(cancellationPacket.actionTiming.cancellationDeadlineDateDisplay, "August 20, 2026");
+  assert(
+    cancellationPacket.groundingVocabulary.knownDateDisplays.includes("August 20, 2026"),
+    "The deterministic cancellation deadline must be accepted by the grounding validator."
+  );
+  const groundedDeadlineFixture = recommendationFixture(cancellationState);
+  groundedDeadlineFixture.nextHeadline = "If you agree, cancel Aurora+ no later than August 20, 2026.";
+  assert.doesNotThrow(
+    () => client.validateRecommendation(groundedDeadlineFixture, cancellationPacket, cancellationState),
+    "The supplied deterministic cancellation deadline must not be rejected as unvalidated."
+  );
   for (const groundedAmount of ["$8.99", "$11.99", "$9.99", "$18.99", "$12.99"]) {
     assert(
       cancellationPacket.groundingVocabulary.knownCurrencyDisplays.includes(groundedAmount),
