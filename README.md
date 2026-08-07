@@ -88,6 +88,7 @@ The CSV, JSON, policy, and LLM-instruction files remain the editable sources of 
 ```text
 .
 ├── index.html
+├── LICENSE
 ├── README.md
 ├── assets/
 │   └── streaming-guard-shield-256.png
@@ -314,6 +315,10 @@ See GitHub’s official [publishing-source documentation](https://docs.github.co
 The final current ten-case hybrid evaluation completed under prompt hash `05971ddc`: all ten cases passed with zero failures, API errors, or material judge gaps. Nine cases used `gpt-5.6-terra` for the agent response and `gpt-5.6-luna` for independent judging; EVAL-07 used the shared deterministic signal detector and made no provider call. The set covers cancellation, missing information, bundle economics, execution refusal, catalog migration, billing escalation, shared-detector no-action restraint, subscription timing, duration-aware pause, and child-rating exceptions.
 
 The Develop phase is complete and the final current evaluation passed all ten cases. Prototype and production roadmaps, fast-follow trackers, local work records, and private planning documents are intentionally excluded from GitHub publishing.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
