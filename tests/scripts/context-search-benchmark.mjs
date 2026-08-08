@@ -109,7 +109,7 @@ const cases = [
   expected({ id: "K20", category: "keyword", query: "How long can MeadowTV be paused?", services: ["SVC-MEADOW"] }),
   expected({ id: "K21", category: "keyword", query: "What are the Lantern+ rating options?", services: ["SVC-LANTERN"] }),
   expected({ id: "K22", category: "keyword", query: "What does QuietFlix cost?", services: ["SVC-QUIET"] }),
-  expected({ id: "K23", category: "keyword", query: "What is on Morgan's watchlist?", members: ["MEM-001"] }),
+  expected({ id: "K23", category: "keyword", query: "What is on Morgan's watchlist?", members: ["MEM-001"], titles: ["TTL-STARWARD", "TTL-GARDEN", "TTL-COPPER", "TTL-MARINER", "TTL-MIDNIGHT-MAP", "TTL-CLOCKWORK", "TTL-WILDFLOWER"], minimumWatchlist: 7 }),
   expected({ id: "K24", category: "keyword", query: "What has Jordan completed?", members: ["MEM-002"] }),
   expected({ id: "K25", category: "keyword", query: "What is Riley watching?", members: ["MEM-003"] }),
   expected({ id: "K26", category: "keyword", query: "What is appropriate for Casey?", members: ["MEM-004"] }),
@@ -215,6 +215,7 @@ const cases = [
   expected({ id: "V38", category: "held_out", query: "Debug this Python function", intent: "out_of_scope" }),
   expected({ id: "V39", category: "held_out", query: "Tell me a joke", intent: "out_of_scope" }),
   expected({ id: "V40", category: "held_out", query: "Suggest a restaurant for a family dinner", intent: "out_of_scope" }),
+  expected({ id: "V41", category: "held_out", query: "What Riley has in their watchlist?", members: ["MEM-003"], titles: ["TTL-STARWARD", "TTL-GARDEN", "TTL-MARINER", "TTL-FREQUENCY", "TTL-RIDGELINE", "TTL-BLUE-HOUR"], minimumWatchlist: 6 }),
 
   // Real-world portfolio-comparison queries added after the first production-log review.
   expected({

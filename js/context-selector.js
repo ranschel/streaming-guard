@@ -318,6 +318,7 @@
     const fuzzyMatches = [];
     const semanticMatches = [];
     const concepts = semanticConcepts(normalizedMessage);
+    const watchlistRequest = /\b(?:watchlist|wish list|wishlist|viewing queue)\b/.test(normalizedMessage);
 
     const servicesById = new Map();
     (knowledge.services || []).forEach(service => {
@@ -498,6 +499,37 @@
         scope === "household_wide"
       ) {
         (state.members || []).forEach(member => selectedMemberIds.add(member.id));
+      }
+
+      // A watchlist question scoped to a named member is a relationship query:
+      // the member match identifies which watchlist rows—and therefore which
+      // titles—must be supplied. Without this expansion the model sees the
+      // person but receives an empty watchlist and can only give a false
+      // absence answer.
+      if (
+        watchlistRequest &&
+        !productMetaRequest &&
+        !outOfScopeRequest &&
+        !rosterRequest &&
+        !executionRequest
+      ) {
+        const memberScopedWatchlist = selectedMemberIds.size
+          ? watchlist.filter(entry => selectedMemberIds.has(entry.memberId))
+          : watchlist;
+        memberScopedWatchlist.forEach(entry => {
+          selectedTitleIds.add(entry.titleId);
+          selectedMemberIds.add(entry.memberId);
+          provenance.push(recordReason(
+            "watchlist.csv",
+            entry.id || entry.titleId,
+            `The adult requested ${memberName((state.members || []).find(member => member.id === entry.memberId) || { id: entry.memberId })}’s watchlist.`
+          ));
+        });
+        semanticMatches.push({
+          type: "relationship",
+          id: selectedMemberIds.size ? "member_watchlist" : "household_watchlist",
+          score: 1
+        });
       }
 
       const titleSemanticRequest = hasAnyConcept(concepts, [
