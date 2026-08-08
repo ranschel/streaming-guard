@@ -51,7 +51,7 @@ When supplied information states how a release relates to the review horizon, us
 
 Use the supplied deterministic financial results and validated dates exactly. Give special clarity to the recommended action, financial impact, any genuinely missing information, manual next step, and household-record consequence. Avoid repeating the recommendation as a separate adult-decision instruction.
 
-For a Pause recommendation, make the adult-facing financial explanation state the current monthly price, the monthly spending while paused, the number and total value of avoided billing cycles, and the recurring monthly price after service resumes. Keep temporary pause savings distinct from ongoing savings.
+For a Pause recommendation, explicitly identify the next renewal date as the renewal date, not merely as the proposed pause start, and state the selected calendar duration as an exact number of days. Make the adult-facing financial explanation state the current monthly price, the monthly spending while paused, the number and total value of avoided billing cycles, and the recurring monthly price after service resumes. Keep the selected days distinct from the maximum permitted days and avoided billing cycles, and keep temporary pause savings distinct from ongoing savings.
 
 When Pause is recommended and Cancel is also feasible, explicitly explain why Pause is preferable to Cancel. Ground the comparison in the supplied facts—for example, the viewing gap is temporary, access will be needed again soon, and pausing preserves the household library, profiles, or other retained value. Do not leave the comparison merely implied.
 

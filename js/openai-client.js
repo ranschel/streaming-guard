@@ -171,6 +171,10 @@
       .replace(/[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g, "");
   }
 
+  function normalizeEvidenceText(value) {
+    return normalizeValidationText(value).replace(/\s+/g, " ").trim();
+  }
+
   const adultVisibleInternalLanguage = Object.freeze([
     /\bcontext\b/i,
     /\bdataset\b/i,
@@ -827,7 +831,9 @@
   function evaluationJudgmentSchema(adultFacingEvidence = []) {
     const exactEvidenceChoices = [
       "",
-      ...new Set(adultFacingEvidence.filter(value => typeof value === "string" && value.trim()))
+      ...new Set(adultFacingEvidence
+        .filter(value => typeof value === "string" && value.trim())
+        .map(normalizeEvidenceText))
     ];
     const properties = {
       rubricPassed: {
@@ -868,7 +874,7 @@
               ? {
                   type: "string",
                   enum: exactEvidenceChoices,
-                  description: "For a passed result, select one complete exact adult-facing field. For a failed result, use the empty string."
+                  description: "For a passed result, select one complete whitespace-normalized adult-facing field. For a failed result, use the empty string."
                 }
               : { type: "string" },
             gap: { type: "string" }
@@ -904,7 +910,7 @@
     if (!Array.isArray(candidate.requirementEvidence) || !candidate.requirementEvidence.length) {
       throw new TypeError("The model returned no per-requirement evaluation evidence.");
     }
-    const normalizedAdultFacingOutput = normalizeValidationText(adultFacingOutput);
+    const normalizedAdultFacingOutput = normalizeEvidenceText(adultFacingOutput);
     candidate.requirementEvidence.forEach(result => {
       if (!result || typeof result !== "object" || Array.isArray(result) ||
           typeof result.requirement !== "string" || !result.requirement.trim() ||
@@ -917,7 +923,7 @@
         if (!result.evidenceQuote.trim() || result.gap.trim()) {
           throw new Error("A passed evaluation requirement must include an exact excerpt and no gap.");
         }
-        const normalizedQuote = normalizeValidationText(result.evidenceQuote);
+        const normalizedQuote = normalizeEvidenceText(result.evidenceQuote);
         if (!normalizedAdultFacingOutput || !normalizedAdultFacingOutput.includes(normalizedQuote)) {
           throw new Error("A passed evaluation requirement cited text that is not present in the adult-facing output.");
         }
@@ -1458,9 +1464,13 @@
         formatMoney(finances.postPauseMonthly)
       ].filter(Boolean);
       const cycleCount = selectedImpact?.avoidedBillingCycles || 0;
+      const selectedPauseDays = Number(candidate.selectedPauseDurationDays) || 0;
       const cycleWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
       const statesCycleCount = pauseDetails.includes(String(cycleCount)) ||
         (cycleWords[cycleCount] && new RegExp(`\\b${cycleWords[cycleCount]}\\b`, "i").test(pauseFinancialText));
+      const statesSelectedPauseDays = selectedPauseDays > 0 && adultFacingStrings.some(text =>
+        new RegExp(`\\b${selectedPauseDays}(?:\\s*[-–—]\\s*|\\s+)days?\\b`, "i").test(text)
+      );
       const missingPauseAmounts = requiredPauseAmounts.filter(amount => !pauseDetails.includes(normalizeValidationText(amount)));
       const statesPostPauseReturn = /\b(?:after|resume|resumes|resumption|return|returns)\b/i.test(pauseFinancialText);
       if (
@@ -1474,6 +1484,17 @@
           ...(!statesPostPauseReturn ? ["the post-pause return price"] : [])
         ];
         throw new Error(`A pause recommendation must state the complete pause financial transition. Missing: ${missing.join(", ")}.`);
+      }
+      const renewalDisplay = decisionPacket.target.nextRenewalDisplay;
+      const identifiesRenewalDate = !renewalDisplay || adultFacingStrings.some(text =>
+        normalizeValidationText(text).includes(normalizeValidationText(renewalDisplay)) &&
+        /\brenew(?:al|s|ing)?\b/i.test(text)
+      );
+      if (!identifiesRenewalDate) {
+        throw new Error(`A pause recommendation must explicitly identify ${renewalDisplay} as the renewal date.`);
+      }
+      if (!statesSelectedPauseDays) {
+        throw new Error(`A pause recommendation must explicitly describe the selected pause as ${selectedPauseDays} days.`);
       }
       if (
         decisionPacket.allowedActions.includes("cancel") &&

@@ -1207,7 +1207,7 @@ function recommendationFixture(state) {
       });
     case "SG-007":
       return common(state, "pause", {
-        action: `Pause ${service} from August 19 through October 14, 2026.`,
+        action: `Pause ${service} from its August 19, 2026 renewal through October 14, 2026.`,
         confidenceLevel: "High",
         trigger: "Morgan and Jordan confirmed completing Clockwork County Season 1.",
         financialHeadline: "Save $31.98 by avoiding two monthly billing cycles during the 57-day pause",
@@ -2280,6 +2280,21 @@ await runSuite(
   assert.throws(
     () => client.validateRecommendation(incompletePause, pausePacket, pauseState),
     /complete pause financial transition/
+  );
+  const unlabeledPauseRenewal = recommendationFixture(pauseState);
+  unlabeledPauseRenewal.action = "Pause MeadowTV from August 19 through October 14, 2026.";
+  assert.throws(
+    () => client.validateRecommendation(unlabeledPauseRenewal, pausePacket, pauseState),
+    /must explicitly identify August 19, 2026 as the renewal date/
+  );
+  const unstatedPauseDays = recommendationFixture(pauseState);
+  unstatedPauseDays.action = "Pause MeadowTV from its August 19, 2026 renewal through October 14, 2026.";
+  unstatedPauseDays.financialHeadline = "Save $31.98 by avoiding two monthly billing cycles during the pause";
+  unstatedPauseDays.financialDetails = "Monthly streaming spending falls from $15.99 to $0.00 during the pause and returns to $15.99 after the pause ends.";
+  unstatedPauseDays.rationale = "Pausing is preferable to canceling because Clockwork County Season 2 begins October 15, 2026 after renewal, and the pause preserves the household library and profile within MeadowTV’s verified 60-day pause window.";
+  assert.throws(
+    () => client.validateRecommendation(unstatedPauseDays, pausePacket, pauseState),
+    /must explicitly describe the selected pause as 57 days/
   );
   const implicitPauseComparison = recommendationFixture(pauseState);
   implicitPauseComparison.rationale = "Pausing preserves the household library and profiles during the temporary viewing gap and restores access before Season 2 begins.";
