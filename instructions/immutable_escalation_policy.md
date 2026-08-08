@@ -73,6 +73,7 @@ Stop normal subscription planning when the adult reports an unauthorized charge,
 - Treat the escalation as having no final subscription action. Do not convert it into a recommendation, an adult-judgment action, or a completed decision.
 - Summarize the reported issue without validating or investigating it.
 - Provide only the validated support URL supplied with the request.
+- Do not claim or promise that provider support will approve, issue, guarantee, secure, or process a refund or another outcome unless that exact capability is explicitly supplied in the validated service information.
 - Do not give legal or financial advice, submit a dispute, request a refund, contact a provider, or update a subscription record without later completion confirmation.
 
 ## 7. Pure execution request

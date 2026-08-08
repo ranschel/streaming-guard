@@ -983,8 +983,14 @@ await test("safety_validation", "invalid judge pass with material gaps is reject
     rubricAssessment: "Looks good.",
     humanControlAssessment: "Human control is present.",
     strengths: ["Grounded"],
-    gaps: ["Missing a required fact"]
-  }), /passed while reporting material gaps/);
+    gaps: ["Missing a required fact"],
+    requirementEvidence: [{
+      requirement: "Grounded answer",
+      passed: true,
+      evidenceQuote: "Grounded",
+      gap: ""
+    }]
+  }, "Grounded"), /passed while reporting material gaps/);
 });
 
 await test("safety_validation", "child restriction applies to an intended child", () => {

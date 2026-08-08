@@ -568,8 +568,8 @@
       },
       confidence: stringField("Why the confidence classification is warranted and any material data gaps. Do not repeat the High, Medium, or Low classification in this field."),
       trigger: stringField("The exact viewing or household event that triggered the recommendation."),
-      financialHeadline: stringField("The main savings or no-savings statement."),
-      financialDetails: stringField("How the financial effect is achieved, using only supplied deterministic amounts."),
+      financialHeadline: stringField("The main financial-effect statement. Distinguish actual savings from an avoided increase: when Keep avoids adding an inactive service, say that the household avoids an added cost and do not call it savings."),
+      financialDetails: stringField("How the financial effect is achieved, using only supplied deterministic amounts. For Pause, explicitly state the current monthly price, monthly spending while paused, avoided billing cycles and total temporary savings, and the recurring monthly price after resumption."),
       rationale: stringField("The concise viewing rationale without repeating the triggering event unnecessarily."),
       evidence: {
         type: "array",
@@ -589,9 +589,9 @@
         description: "For Pause, the number of billing cycles avoided by the chosen pause; otherwise 0. This is not the calendar duration."
       },
       decisionHeadline: stringField("When adult judgment is required, the specific missing information or approval to request. For an actionable recommendation, use an empty string because the recommendation header already states the decision."),
-      decisionDetails: stringField("Optional clarification about genuinely missing information or approval; use an empty string when adult judgment is not required."),
+      decisionDetails: stringField("Optional clarification about genuinely missing information or approval; use an empty string when adult judgment is not required. For a child-rating conflict, explicitly state that any approval applies only to the named title and named child viewer and leaves the standing rating rule unchanged for every other title and viewer."),
       nextHeadline: stringField("The prominent manual next step, addressed directly to the authorized adult as you. Use polite recommendation language such as 'If you agree, please'; never use 'must' or the adult's name."),
-      nextDetails: stringField("Friendly supporting detail for the manual next step, addressed as you; use an empty string when none is needed."),
+      nextDetails: stringField("Friendly supporting detail for the manual next step, addressed as you; use an empty string when none is needed. Never promise future monitoring, tracking, notifications, alerts, or reminders unless the supplied runtime information explicitly confirms that capability was scheduled."),
       reminderHeadline: stringField("The prominent household-record consequence. For Subscribe, Cancel, or Pause, reserve this field exclusively for a clear statement that the subscription record remains unchanged until the adult confirms completing the external action. Do not use this field for a future-release reminder or another general reminder. For Keep or Adult judgment required, state the applicable current record consequence."),
       reminderDetails: stringField("Supporting detail for the household-record consequence. For Subscribe, Cancel, or Pause, explicitly explain that the application updates the subscription record only after the adult confirms completing the external action. Put any future-release reminder elsewhere in the recommendation. Use an empty string only when no supporting detail is needed.")
     };
@@ -851,6 +851,21 @@
         type: "array",
         description: "Material omissions or contradictions. Use an empty array when none exist.",
         items: { type: "string" }
+      },
+      requirementEvidence: {
+        type: "array",
+        description: "One result for every material expected-behavior requirement. Every passed result must contain a short exact excerpt copied from the adult-facing output; every failed result must contain an empty excerpt and a precise gap.",
+        items: {
+          type: "object",
+          properties: {
+            requirement: { type: "string" },
+            passed: { type: "boolean" },
+            evidenceQuote: { type: "string" },
+            gap: { type: "string" }
+          },
+          required: ["requirement", "passed", "evidenceQuote", "gap"],
+          additionalProperties: false
+        }
       }
     };
     return {
@@ -861,7 +876,7 @@
     };
   }
 
-  function validateEvaluationJudgment(candidate) {
+  function validateEvaluationJudgment(candidate, adultFacingOutput = "") {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
       throw new TypeError("The model did not return an evaluation judgment object.");
     }
@@ -876,8 +891,38 @@
         !Array.isArray(candidate.gaps) || candidate.gaps.some(item => typeof item !== "string")) {
       throw new TypeError("The model returned invalid evaluation evidence.");
     }
+    if (!Array.isArray(candidate.requirementEvidence) || !candidate.requirementEvidence.length) {
+      throw new TypeError("The model returned no per-requirement evaluation evidence.");
+    }
+    const normalizedAdultFacingOutput = normalizeValidationText(adultFacingOutput);
+    candidate.requirementEvidence.forEach(result => {
+      if (!result || typeof result !== "object" || Array.isArray(result) ||
+          typeof result.requirement !== "string" || !result.requirement.trim() ||
+          typeof result.passed !== "boolean" ||
+          typeof result.evidenceQuote !== "string" ||
+          typeof result.gap !== "string") {
+        throw new TypeError("The model returned invalid per-requirement evaluation evidence.");
+      }
+      if (result.passed) {
+        if (!result.evidenceQuote.trim() || result.gap.trim()) {
+          throw new Error("A passed evaluation requirement must include an exact excerpt and no gap.");
+        }
+        const normalizedQuote = normalizeValidationText(result.evidenceQuote);
+        if (!normalizedAdultFacingOutput || !normalizedAdultFacingOutput.includes(normalizedQuote)) {
+          throw new Error("A passed evaluation requirement cited text that is not present in the adult-facing output.");
+        }
+      } else if (result.evidenceQuote.trim() || !result.gap.trim()) {
+        throw new Error("A failed evaluation requirement must include an empty excerpt and a precise gap.");
+      }
+    });
     if (candidate.rubricPassed && candidate.gaps.length) {
       throw new Error("The model marked the rubric as passed while reporting material gaps.");
+    }
+    if (candidate.rubricPassed && candidate.requirementEvidence.some(result => !result.passed)) {
+      throw new Error("The model marked the rubric as passed while a material requirement failed.");
+    }
+    if (!candidate.rubricPassed && candidate.requirementEvidence.every(result => result.passed)) {
+      throw new Error("The model marked the rubric as failed without identifying a failed material requirement.");
     }
     return candidate;
   }
@@ -1262,6 +1307,12 @@
     ) {
       throw new Error("A billing or legal escalation must include an applicable validated support URL.");
     }
+    if (
+      candidate.safetyDisposition === "billing_or_legal_escalation" &&
+      /\b(?:support|provider|service)[^.]{0,140}\b(?:can|will)\b[^.]{0,100}\b(?:approve|issue|guarantee|secure|process)\b[^.]{0,40}\brefund\b/i.test(candidate.reply)
+    ) {
+      throw new Error("A billing or legal escalation cannot promise that provider support will deliver a refund outcome.");
+    }
     if (candidate.discussionStatus === "external_action_pending" && candidate.nextExpectedInput !== "external_action_confirmation") {
       throw new Error("An accepted external action must wait for completion confirmation.");
     }
@@ -1343,6 +1394,103 @@
     ]);
 
     const candidateText = normalizeValidationText(JSON.stringify(candidate));
+    const adultFacingStrings = [
+      candidate.action,
+      candidate.confidence,
+      candidate.trigger,
+      candidate.financialHeadline,
+      candidate.financialDetails,
+      candidate.rationale,
+      ...candidate.evidence,
+      candidate.decisionHeadline,
+      candidate.decisionDetails,
+      candidate.nextHeadline,
+      candidate.nextDetails,
+      candidate.reminderHeadline,
+      candidate.reminderDetails
+    ];
+    const unmatchedQuoteField = adultFacingStrings.find(text => (text.match(/"/g) || []).length % 2 !== 0);
+    if (unmatchedQuoteField) {
+      throw new Error("The model returned adult-facing text with an unmatched quotation mark.");
+    }
+    if (
+      adultFacingStrings.some(text => /\b(?:i|we)(?:\s+will|'ll)\s+(?:monitor|track|notify|alert|remind)\b/i.test(text))
+    ) {
+      throw new Error("The model promised unsupported future monitoring or reminder behavior.");
+    }
+    if (
+      requestsJudgment &&
+      (/\b(?:i\s+)?recommend(?:ed|ing|s)?\b/i.test(candidate.action) || /^(?:please\s+)?(?:keep|hold off)\b/i.test(candidate.action.trim()))
+    ) {
+      throw new Error("An adult-judgment action cannot be presented as a recommendation.");
+    }
+
+    const selectedImpact = decisionPacket.actionFinancialImpacts[candidate.actionType] || null;
+    if (
+      candidate.actionType === "keep" &&
+      decisionPacket.target.subscriptionStatus !== "active" &&
+      selectedImpact?.monthlySavings === 0 &&
+      /\b(?:save|saves|saving)\s+\$/i.test(`${candidate.financialHeadline} ${candidate.financialDetails}`)
+    ) {
+      throw new Error("An avoided subscription increase cannot be described as current savings.");
+    }
+    if (candidate.actionType === "pause") {
+      const finances = global.StreamingGuardRecommendationEngine.recommendationFinancesForAction(state, candidate.actionType);
+      const formatMoney = amount => global.StreamingGuardRecommendationEngine.formatMoney(state, amount);
+      const pauseFinancialText = `${candidate.financialHeadline} ${candidate.financialDetails}`;
+      const pauseDetails = normalizeValidationText(pauseFinancialText);
+      const requiredPauseAmounts = [
+        selectedImpact?.currentMonthlyDisplay,
+        selectedImpact?.proposedMonthlyDisplay,
+        selectedImpact?.projectedSavingsDisplay,
+        formatMoney(finances.postPauseMonthly)
+      ].filter(Boolean);
+      const cycleCount = selectedImpact?.avoidedBillingCycles || 0;
+      const cycleWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+      const statesCycleCount = pauseDetails.includes(String(cycleCount)) ||
+        (cycleWords[cycleCount] && new RegExp(`\\b${cycleWords[cycleCount]}\\b`, "i").test(pauseFinancialText));
+      const missingPauseAmounts = requiredPauseAmounts.filter(amount => !pauseDetails.includes(normalizeValidationText(amount)));
+      const statesPostPauseReturn = /\b(?:after|resume|resumes|resumption|return|returns)\b/i.test(pauseFinancialText);
+      if (
+        missingPauseAmounts.length ||
+        !statesCycleCount ||
+        !statesPostPauseReturn
+      ) {
+        const missing = [
+          ...missingPauseAmounts,
+          ...(!statesCycleCount ? [`${cycleCount} avoided billing cycles`] : []),
+          ...(!statesPostPauseReturn ? ["the post-pause return price"] : [])
+        ];
+        throw new Error(`A pause recommendation must state the complete pause financial transition. Missing: ${missing.join(", ")}.`);
+      }
+      if (
+        decisionPacket.allowedActions.includes("cancel") &&
+        !(
+          /\bcancel(?:ing|lation|led)?\b/i.test(candidateText) &&
+          /\b(?:rather than|instead of|better than|prefer(?:able|red)? to|preferred over)\b/i.test(candidateText)
+        )
+      ) {
+        throw new Error("A pause recommendation must explicitly explain why Pause is preferable to Cancel when both actions are feasible.");
+      }
+    }
+    if (requestsJudgment && decisionPacket.childSafety?.conflicts?.length) {
+      const normalizedDetails = normalizeValidationText(candidate.decisionDetails);
+      const expectedNames = [
+        decisionPacket.viewingSignal.titleName,
+        ...decisionPacket.childSafety.conflicts.map(child => child.memberName)
+      ].filter(Boolean).map(normalizeValidationText);
+      const missingNames = expectedNames.filter(name => !normalizedDetails.includes(name));
+      const statesNarrowScope = /\bonly\b/i.test(candidate.decisionDetails);
+      const preservesStandingRule = /\b(?:unchanged|does not change|would not change|remain|remains)\b/i.test(candidate.decisionDetails);
+      if (missingNames.length || !statesNarrowScope || !preservesStandingRule) {
+        const missing = [
+          ...missingNames,
+          ...(!statesNarrowScope ? ["title-and-child-only scope"] : []),
+          ...(!preservesStandingRule ? ["standing-rule preservation"] : [])
+        ];
+        throw new Error(`A child-safety judgment must narrowly scope the exception and preserve the standing rule. Missing: ${missing.join(", ")}.`);
+      }
+    }
 
     const currencyAmounts = candidateText.match(/\$\d[\d,]*(?:\.\d{2})?/g) || [];
     const allowedCurrency = new Set([
@@ -1550,6 +1698,23 @@
     knowledge,
     signal
   }) {
+    const adultFacingOutput = [
+      output.status,
+      output.action,
+      output.trigger,
+      output.financialHeadline,
+      output.financialDetails,
+      output.rationale,
+      ...(Array.isArray(output.evidence) ? output.evidence : []),
+      output.decisionHeadline,
+      output.decisionDetails,
+      output.nextHeadline,
+      output.nextDetails,
+      output.reminderHeadline,
+      output.reminderDetails,
+      output.confidence,
+      output.reply
+    ].filter(value => typeof value === "string" && value.trim()).join("\n");
     const input = [
       `Evaluation ID: ${item.eval_id}`,
       `Case name: ${item.case_name}`,
@@ -1566,6 +1731,9 @@
       "",
       "Deterministic structured checks already completed by the application:",
       JSON.stringify(deterministicCriteria, null, 2),
+      "",
+      "Adult-facing output text to evaluate and quote as evidence:",
+      adultFacingOutput,
       "",
       "Complete model output to judge:",
       JSON.stringify(output, null, 2)
@@ -1597,7 +1765,7 @@
     try {
       return {
         ...result,
-        judgment: validateEvaluationJudgment(parsed)
+        judgment: validateEvaluationJudgment(parsed, adultFacingOutput)
       };
     } catch (error) {
       error.output = parsed;

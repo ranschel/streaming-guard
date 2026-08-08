@@ -43,13 +43,14 @@
       return {
         approvedHash: typeof parsed.approvedHash === "string" ? parsed.approvedHash : null,
         approvedAt: typeof parsed.approvedAt === "string" ? parsed.approvedAt : null,
+        approvalScope: parsed.approvalScope === "instructions-v1" ? parsed.approvalScope : null,
         lastFullRunCompletedAt: typeof parsed.lastFullRunCompletedAt === "string"
           ? parsed.lastFullRunCompletedAt
           : legacyFullRunCompletedAt,
         results
       };
     } catch (_) {
-      return { approvedHash: null, approvedAt: null, lastFullRunCompletedAt: null, results: {} };
+      return { approvedHash: null, approvedAt: null, approvalScope: null, lastFullRunCompletedAt: null, results: {} };
     }
   }
 
@@ -104,6 +105,10 @@
         prompts: promptBundle(),
         cases: caseFingerprintData()
       }));
+    }
+
+    function instructionHash() {
+      return fingerprint(JSON.stringify(promptBundle()));
     }
 
     function agentHash() {
@@ -259,7 +264,24 @@
     }
 
     function promptApproved() {
-      return Boolean(saved.approvedHash && saved.approvedHash === currentHash());
+      const activeInstructionHash = instructionHash();
+      if (saved.approvalScope === "instructions-v1") {
+        return Boolean(saved.approvedHash && saved.approvedHash === activeInstructionHash);
+      }
+      const approvedAt = Date.parse(saved.approvedAt || "");
+      const instructionsUpdatedAt = Date.parse(knowledge.instructionBundleUpdatedAt || "");
+      if (
+        saved.approvedHash &&
+        Number.isFinite(approvedAt) &&
+        Number.isFinite(instructionsUpdatedAt) &&
+        approvedAt >= instructionsUpdatedAt
+      ) {
+        saved.approvedHash = activeInstructionHash;
+        saved.approvalScope = "instructions-v1";
+        persist();
+        return true;
+      }
+      return false;
     }
 
     function prepareState(item) {
@@ -594,6 +616,7 @@
         }),
         prompts: promptBundle(),
         promptHash: currentHash(),
+        instructionHash: instructionHash(),
         instructionsUpdatedAt: knowledge.instructionBundleUpdatedAt,
         lastFullRunCompletedAt: saved.lastFullRunCompletedAt,
         promptApproved: promptApproved(),
@@ -754,14 +777,16 @@
       exportResultsText,
       rejudgeSavedResults,
       approvePromptReview() {
-        saved.approvedHash = currentHash();
+        saved.approvedHash = instructionHash();
         saved.approvedAt = clock();
+        saved.approvalScope = "instructions-v1";
         persist();
         return model();
       },
       revokePromptReview() {
         saved.approvedHash = null;
         saved.approvedAt = null;
+        saved.approvalScope = null;
         persist();
         return model();
       },
@@ -779,7 +804,7 @@
       },
       reset() {
         if (runningEvalId || runningAll) throw new Error("Wait for the current evaluation to finish.");
-        saved = { approvedHash: null, approvedAt: null, lastFullRunCompletedAt: null, results: {} };
+        saved = { approvedHash: null, approvedAt: null, approvalScope: null, lastFullRunCompletedAt: null, results: {} };
         storage.removeItem(STORAGE_KEY);
         return model();
       },

@@ -64,7 +64,13 @@ function judgment() {
     humanControlPassed: true,
     humanControlAssessment: "The adult retains control of external actions.",
     strengths: ["Grounded and advisory"],
-    gaps: []
+    gaps: [],
+    requirementEvidence: [{
+      requirement: "The response is grounded and advisory.",
+      passed: true,
+      evidenceQuote: "Action recommended",
+      gap: ""
+    }]
   };
 }
 
