@@ -271,6 +271,23 @@
     return date.toISOString().slice(0, 10);
   }
 
+  function addMonths(isoDate, monthOffset) {
+    const date = new Date(`${isoDate}T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) throw new TypeError("isoDate must be a valid ISO date.");
+    const offset = requireFiniteNumber(monthOffset, "monthOffset");
+    if (!Number.isInteger(offset)) throw new TypeError("monthOffset must be an integer.");
+    const originalDay = date.getUTCDate();
+    date.setUTCDate(1);
+    date.setUTCMonth(date.getUTCMonth() + offset);
+    const lastDayOfTargetMonth = new Date(Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth() + 1,
+      0
+    )).getUTCDate();
+    date.setUTCDate(Math.min(originalDay, lastDayOfTargetMonth));
+    return date.toISOString().slice(0, 10);
+  }
+
   global.StreamingGuardMath = Object.freeze({
     roundCurrency,
     formatCurrency,
@@ -284,6 +301,7 @@
     clampPercent,
     daysBetween,
     localDateIso,
-    addDays
+    addDays,
+    addMonths
   });
 })(window);

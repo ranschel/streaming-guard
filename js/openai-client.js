@@ -152,7 +152,7 @@
     return (response.content || [])
       .filter(item => item.type === "text" && typeof item.text === "string")
       .map(item => item.text)
-      .join("\n")
+      .join("")
       .trim();
   }
 
@@ -161,7 +161,7 @@
       .flatMap(candidate => candidate.content?.parts || [])
       .filter(part => typeof part.text === "string")
       .map(part => part.text)
-      .join("\n")
+      .join("")
       .trim();
   }
 
@@ -429,8 +429,12 @@
             parts: [{ text: input }]
           }],
           generationConfig: {
-            responseMimeType: "application/json",
-            responseJsonSchema: schema
+            responseFormat: {
+              text: {
+                mimeType: "application/json",
+                schema
+              }
+            }
           }
         }
       };

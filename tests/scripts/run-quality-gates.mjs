@@ -18,6 +18,11 @@ const gates = [
     args: ["tests/scripts/verify-component-quality.mjs"]
   },
   {
+    id: "provider_connectors",
+    label: "Keyless provider connector contracts",
+    args: ["tests/scripts/verify-provider-connectors.mjs"]
+  },
+  {
     id: "context_retrieval",
     label: "Hybrid context retrieval",
     args: ["tests/scripts/context-search-benchmark.mjs", "--require=95"]
@@ -54,6 +59,9 @@ const feedbackReport = JSON.parse(
 const contextReport = JSON.parse(
   fs.readFileSync("tests/reports/context_search_benchmark_results.json", "utf8")
 );
+const providerReport = JSON.parse(
+  fs.readFileSync("tests/reports/provider_connector_results.json", "utf8")
+);
 const structureReport = JSON.parse(
   fs.readFileSync("tests/reports/project_structure_results.json", "utf8")
 );
@@ -77,6 +85,12 @@ const report = {
     passed: componentReport.passed,
     total: componentReport.total,
     successRate: componentReport.successRate
+  },
+  providerConnectors: {
+    passed: providerReport.passed,
+    total: providerReport.total,
+    successRate: providerReport.successRate,
+    liveNetworkCallsMade: providerReport.liveNetworkCallsMade
   },
   contextRetrieval: {
     passed: contextReport.passed,
@@ -103,6 +117,7 @@ console.log(
   `Deterministic quality gates: ${report.passed ? "PASS" : "FAIL"} · ` +
   `${report.projectStructure.passed}/${report.projectStructure.total} structure checks · ` +
   `${report.componentAssertions.passed}/${report.componentAssertions.total} component assertions · ` +
+  `${report.providerConnectors.passed}/${report.providerConnectors.total} provider connector checks · ` +
   `${report.contextRetrieval.passed}/${report.contextRetrieval.total} context cases.`
 );
 

@@ -612,10 +612,16 @@ assert(knowledge.evaluationJudge.includes("Do not require footnotes, formal cita
 assert(knowledge.evaluationJudge.includes("Do not require the response to name record categories"));
 assert(knowledge.evaluationJudge.includes("keep, leave, retain, or preserve an existing subscription record"));
 assert(knowledge.evaluationJudge.includes("contradiction between the recommended action timing"));
+assert(knowledge.evaluationJudge.includes("relative-time claim and the supplied authoritative relationship to the review horizon"));
+assert(knowledge.evaluationJudge.includes("monthly spending during the pause"));
+assert(knowledge.evaluationJudge.includes("presents Subscribe, Keep, Pause, Cancel, or Change plan as the recommended action"));
 assert(knowledge.evaluationJudge.includes("Independently assess every remaining material requirement"));
 assert(knowledge.recommendationAddon.includes("distinguish the calendar pause window from its billing effect"));
 assert(knowledge.recommendationAddon.includes("maximum permitted pause in calendar days"));
 assert(knowledge.recommendationAddon.includes("Use avoided billing cycles only to calculate and explain savings"));
+assert(knowledge.recommendationAddon.includes("temporary consequence of deferring action, not as a recommendation"));
+assert(knowledge.recommendationAddon.includes("Do not independently infer, recalculate, or contradict whether the release is within or beyond the horizon"));
+assert(knowledge.recommendationAddon.includes("monthly spending while paused"));
 assert(client.recommendationSchema().required.includes("selectedPauseDurationDays"));
 assert(client.recommendationSchema().required.includes("maximumPauseDays"));
 assert(client.recommendationSchema().required.includes("avoidedBillingCycles"));
@@ -902,10 +908,18 @@ for (const record of knowledge.agentEvals) {
 
 {
   const resolvedBundleState = context.createSeedState("SG-003");
+  const resolvedBundleScenario = knowledge.agentEvals.find(record => record.case_id === "SG-003");
+  context.rebaseStateDates(resolvedBundleState, resolvedBundleScenario.system_date);
   const resolvedBundlePacket = engine.buildDecisionPacket(resolvedBundleState);
   assert.equal(resolvedBundlePacket.adultJudgmentGate.required, false);
   assert(resolvedBundlePacket.allowedActions.includes("keep"));
   assert(!resolvedBundlePacket.allowedActions.includes("request_adult_judgment"));
+  assert.equal(resolvedBundlePacket.nextRelevantRelease.date, "2027-01-14");
+  assert.equal(resolvedBundlePacket.nextRelevantRelease.daysUntilRelease, 176);
+  assert.equal(resolvedBundlePacket.nextRelevantRelease.reviewHorizonEndDate, "2027-07-22");
+  assert.equal(resolvedBundlePacket.nextRelevantRelease.reviewHorizonEndDateDisplay, "July 22, 2027");
+  assert.equal(resolvedBundlePacket.nextRelevantRelease.withinReviewHorizon, true);
+  assert.equal(resolvedBundlePacket.nextRelevantRelease.relativeToReviewHorizon, "within the 12-month review horizon");
 
   const missingViewingState = context.createSeedState("SG-002");
   const missingViewingPacket = engine.buildDecisionPacket(missingViewingState);
@@ -1611,8 +1625,8 @@ function passingJudgment() {
   });
   assert(routedRequest.url.endsWith("/gemini-3.5-flash-lite:generateContent"));
   assert.equal(routedRequest.headers["x-goog-api-key"], "local-gemini-key");
-  assert.equal(routedRequest.body.generationConfig.responseMimeType, "application/json");
-  assert(routedRequest.body.generationConfig.responseJsonSchema.properties.rubricPassed);
+  assert.equal(routedRequest.body.generationConfig.responseFormat.text.mimeType, "application/json");
+  assert(routedRequest.body.generationConfig.responseFormat.text.schema.properties.rubricPassed);
   assert.equal(geminiJudgment.model, "gemini-3.5-flash-lite");
 
   client.clearSettings();

@@ -37,6 +37,35 @@
       : dayBeforeRenewal;
   }
 
+  function releaseHorizonContext(state) {
+    const releaseDate = state.scenario.nextReleaseDate || null;
+    const reviewHorizonMonths = Number(state.scenario.reviewHorizonMonths || 0);
+    const reviewHorizonEndDate = state.systemDate && reviewHorizonMonths > 0
+      ? math.addMonths(state.systemDate, reviewHorizonMonths)
+      : null;
+    const daysUntilRelease = state.systemDate && releaseDate
+      ? math.daysBetween(state.systemDate, releaseDate)
+      : null;
+    const relativeToReviewHorizon = !releaseDate || !state.systemDate || !reviewHorizonEndDate
+      ? "unknown"
+      : releaseDate < state.systemDate
+        ? "before the current date"
+        : releaseDate <= reviewHorizonEndDate
+          ? `within the ${reviewHorizonMonths}-month review horizon`
+          : `beyond the ${reviewHorizonMonths}-month review horizon`;
+
+    return Object.freeze({
+      reviewHorizonMonths,
+      reviewHorizonEndDate,
+      reviewHorizonEndDateDisplay: reviewHorizonEndDate
+        ? displayDate(reviewHorizonEndDate, state.household.locale)
+        : null,
+      daysUntilRelease,
+      relativeToReviewHorizon,
+      withinReviewHorizon: relativeToReviewHorizon.startsWith("within the ")
+    });
+  }
+
   function memberById(state, memberId) {
     return state.members.find(member => member.id === memberId);
   }
@@ -384,6 +413,7 @@
     const judgmentReasons = adultJudgmentReasons(state);
     const actions = allowedDecisionActions(state);
     const activePauseWindow = pauseWindow(state, subscription);
+    const releaseHorizon = releaseHorizonContext(state);
     const cancellationDeadlineDate = actions.includes("cancel")
       ? recommendedCancellationDeadlineDate(state, subscription)
       : null;
@@ -416,6 +446,7 @@
       state.systemDate ? displayDate(state.systemDate, state.household.locale) : null,
       subscription?.nextRenewal ? displayDate(subscription.nextRenewal, state.household.locale) : null,
       state.scenario.nextReleaseDate ? displayDate(state.scenario.nextReleaseDate, state.household.locale) : null,
+      releaseHorizon.reviewHorizonEndDateDisplay,
       activePauseWindow.pauseStartDate
         ? displayDate(activePauseWindow.pauseStartDate, state.household.locale)
         : null,
@@ -459,6 +490,30 @@
     ])];
 
     const childSafety = childSafetyContext(state);
+    const responseCompletenessFacts = Object.freeze({
+      targetPlan: {
+        serviceName: state.scenario.targetServiceName,
+        planName: state.scenario.targetPlanName
+      },
+      cancellationAccessTerms: subscription?.cancellationConsequences || null,
+      currentlyAvailablePriorityTitles: (state.scenario.supportingPriorityTitles || [])
+        .filter(title => title.availableNow)
+        .map(title => ({
+          titleName: title.titleName,
+          serviceName: title.serviceName || state.scenario.targetServiceName,
+          planName: state.scenario.targetPlanName
+        })),
+      childRatingExceptionBoundary: childSafety.conflicts.length
+        ? {
+            namedTitleOnly: state.scenario.titleName,
+            namedChildViewersOnly: childSafety.conflicts.map(conflict => ({
+              memberId: conflict.memberId,
+              memberName: conflict.memberName
+            })),
+            standingRatingRuleRemainsUnchanged: true
+          }
+        : null
+    });
     return Object.freeze({
       currentDate: state.systemDate,
       currentDateDisplay: state.systemDate
@@ -508,6 +563,7 @@
         allIntendedViewersCompleted: viewersWithoutConfirmedCompletionNames.length === 0
       },
       childSafety,
+      responseCompletenessFacts,
       priorityCoverage: {
         otherHighPriorityTitlesOnTargetService: state.scenario.otherPriorityTitlesOnTarget,
         supportingPriorityTitles: (state.scenario.supportingPriorityTitles || []).map(title => ({
@@ -542,7 +598,8 @@
         recommendedAccessStartDateDisplay: recommendedAccessStartDate(state)
           ? displayDate(recommendedAccessStartDate(state), state.household.locale)
           : null,
-        releasePattern: state.scenario.nextReleasePattern || null
+        releasePattern: state.scenario.nextReleasePattern || null,
+        ...releaseHorizon
       },
       actionTiming: {
         cancellationDeadlineDate,

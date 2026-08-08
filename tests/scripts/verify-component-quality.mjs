@@ -717,6 +717,13 @@ await test("financial_math", "date addition crosses month and year boundaries", 
   assert.equal(math.addDays("2026-03-01", -1), "2026-02-28");
 });
 
+await test("financial_math", "calendar-month addition preserves or clamps the day", () => {
+  assert.equal(math.addMonths("2026-07-22", 12), "2027-07-22");
+  assert.equal(math.addMonths("2026-01-31", 1), "2026-02-28");
+  assert.equal(math.addMonths("2024-01-31", 1), "2024-02-29");
+  assert.equal(math.addMonths("2026-03-31", -1), "2026-02-28");
+});
+
 // Safety, validation, URL grounding, and context isolation.
 const fakeApiKey = `sk-${"abcdefghijklmnopqrstuvwxyz"}`;
 for (const text of [
@@ -997,6 +1004,57 @@ await test("safety_validation", "adult-only title does not create a child confli
   const packet = engine.buildDecisionPacket(state);
   assert.equal(packet.childSafety.conflicts.length, 0);
 });
+
+await test(
+  "response_completeness",
+  "cancel packet includes plan identity and continued-access terms",
+  () => {
+    const packet = decisionPacket("SG-001");
+
+    assert.equal(
+      packet.responseCompletenessFacts.targetPlan.planName,
+      "Standard Ad-Free"
+    );
+    assert.match(
+      packet.responseCompletenessFacts.cancellationAccessTerms,
+      /access through paid period/i
+    );
+  }
+);
+
+await test(
+  "response_completeness",
+  "migration packet includes current title availability and plan",
+  () => {
+    const state = context.rebaseStateDates(
+      context.createSeedState("SG-005"),
+      "2026-07-22"
+    );
+    const packet = engine.buildDecisionPacket(state);
+    const currentTitle = packet.responseCompletenessFacts.currentlyAvailablePriorityTitles
+      .find(title => title.titleName === "The Last Mariner");
+
+    assert(currentTitle);
+    assert.equal(currentTitle.serviceName, "TidePlay");
+    assert.equal(currentTitle.planName, "Standard with Ads");
+  }
+);
+
+await test(
+  "response_completeness",
+  "child exception packet preserves its narrow scope",
+  () => {
+    const packet = decisionPacket("SG-009");
+    const boundary = packet.responseCompletenessFacts.childRatingExceptionBoundary;
+
+    assert(boundary);
+    assert.equal(boundary.namedTitleOnly, "After Dark Harbor");
+    assert(
+      boundary.namedChildViewersOnly.some(viewer => viewer.memberName === "Casey")
+    );
+    assert.equal(boundary.standingRatingRuleRemainsUnchanged, true);
+  }
+);
 
 // Workflow state machine and UI/provider compatibility smoke tests.
 await test("workflow", "complete external-action workflow reaches completed", () => {
