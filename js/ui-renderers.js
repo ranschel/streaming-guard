@@ -789,9 +789,6 @@
     const selectedJudgment = selectedResult?.judgment
       ? `<details class="eval-output"><summary>Independent judge output</summary><pre>${escapeHtml(JSON.stringify(selectedResult.judgment, null, 2))}</pre></details>`
       : "";
-    const selectedJudgeRetries = selectedResult?.judgeValidationRetries?.length
-      ? `<details class="eval-output"${selectedVerdict === "error" ? " open" : ""}><summary>Rejected judge validation attempts</summary><pre>${escapeHtml(JSON.stringify(selectedResult.judgeValidationRetries, null, 2))}</pre></details>`
-      : "";
     const selectedError = selectedResult?.error ? `<p class="eval-error">${escapeHtml(selectedResult.error)}</p>` : "";
 
     return `<div class="evaluation-runner">
@@ -824,7 +821,7 @@
 
       ${model.hasSavedResults && model.counts.not_run === caseCount && model.hasRejudgeableResults ? `<p class="eval-notice">The saved agent outputs are compatible with the current agent instructions. Approve the current judge instructions, then rejudge them without regenerating the responses.</p>` : ""}
       ${model.hasSavedResults && model.counts.not_run === caseCount && !model.hasRejudgeableResults ? `<p class="eval-notice">Saved outputs from an incompatible prompt version remain available through Copy output.</p>` : ""}
-      ${!model.promptApproved ? `<p class="eval-notice">Open Instructions, review the current instruction bundle, then approve it before running a case.</p>` : ""}
+      ${!model.promptApproved ? `<p class="eval-notice">Open Instructions, review the prompt bundle and ${escapeHtml(caseCount)} expected outcomes, then approve it before running a case.</p>` : ""}
       ${model.promptApproved && !model.connected ? `<p class="eval-notice">The prompt is approved. Connect the providers required by the selected models from the top banner.</p>` : ""}
 
       <div class="eval-results-workspace">
@@ -857,7 +854,7 @@
                 <section><span>Human-readable output</span><div class="eval-readable-text">${escapeHtml(selectedItem.humanReadableOutput)}</div></section>
               </div>
             </details>
-            ${criteriaMarkup}${selectedError}${selectedJudgeRetries}${selectedOutput}${selectedJudgment}
+            ${criteriaMarkup}${selectedError}${selectedOutput}${selectedJudgment}
             <div class="eval-case-footer">
               <small>${selectedResult?.completedAt ? `Completed ${escapeHtml(dateTime(selectedResult.completedAt))}${selectedResult.model ? ` · response ${escapeHtml(selectedResult.model)}` : ""}${selectedResult.judgeModel ? ` · judge ${escapeHtml(selectedResult.judgeModel)}` : ""}` : "No API call has been made for this case."}</small>
             </div>
@@ -872,7 +869,7 @@
           <div class="eval-section-heading">
             <div><p>These are the exact provider-independent instruction components used by every live model call.</p></div>
             <div class="eval-instruction-version">
-              <code>${escapeHtml(model.instructionHash)}</code>
+              <code>${escapeHtml(model.promptHash)}</code>
               <small>Instructions updated ${escapeHtml(dateTime(model.instructionsUpdatedAt))}</small>
             </div>
           </div>
@@ -880,8 +877,8 @@
           ${promptSpecs.map(promptCard).join("")}
           <div class="eval-approval-gate ${model.promptApproved ? "approved" : ""}">
             ${model.promptApproved
-              ? `<div><strong>Prompt review approved</strong><span>${escapeHtml(dateTime(model.approvedAt))} · Stays approved when providers or models change and expires only when the instructions change.</span></div><button type="button" data-eval-action="revoke-approval">Revoke approval</button>`
-              : `<label><input id="promptReviewConfirmation" type="checkbox"> <span>I reviewed all six instruction sections.</span></label><button type="button" data-eval-action="approve-prompt" disabled>Approve for eval run</button>`}
+              ? `<div><strong>Prompt review approved</strong><span>${escapeHtml(dateTime(model.approvedAt))} · Expires automatically if the instructions or cases change.</span></div><button type="button" data-eval-action="revoke-approval">Revoke approval</button>`
+              : `<label><input id="promptReviewConfirmation" type="checkbox"> <span>I reviewed all six instruction sections and ${escapeHtml(caseCount)} expected outcomes.</span></label><button type="button" data-eval-action="approve-prompt" disabled>Approve for eval run</button>`}
           </div>
         </div>
       </aside>

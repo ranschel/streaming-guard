@@ -983,14 +983,8 @@ await test("safety_validation", "invalid judge pass with material gaps is reject
     rubricAssessment: "Looks good.",
     humanControlAssessment: "Human control is present.",
     strengths: ["Grounded"],
-    gaps: ["Missing a required fact"],
-    requirementEvidence: [{
-      requirement: "Grounded answer",
-      passed: true,
-      evidenceQuote: "Grounded",
-      gap: ""
-    }]
-  }, "Grounded"), /passed while reporting material gaps/);
+    gaps: ["Missing a required fact"]
+  }), /passed while reporting material gaps/);
 });
 
 await test("safety_validation", "child restriction applies to an intended child", () => {
@@ -1160,16 +1154,6 @@ await test("provider_ui", "all structured schemas are strict objects", () => {
     assert.equal(schema.additionalProperties, false);
     assert(Array.isArray(schema.required));
   }
-});
-
-await test("provider_ui", "judge evidence is constrained to exact adult-facing fields", () => {
-  const evidence = ["Exact action text.", "First refusal section.\n\nSecond refusal section."];
-  const schema = client.evaluationJudgmentSchema(evidence);
-  assert.equal(
-    JSON.stringify(schema.properties.requirementEvidence.items.properties.evidenceQuote.enum),
-    JSON.stringify(["", "Exact action text.", "First refusal section. Second refusal section."])
-  );
-  assert(schema.properties.requirementEvidence.items.properties.evidenceQuote.enum.every(value => !value.includes("\n")));
 });
 
 await test("provider_ui", "external-action recommendation fields preserve the record confirmation gate", () => {

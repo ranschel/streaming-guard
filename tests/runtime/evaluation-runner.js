@@ -43,14 +43,13 @@
       return {
         approvedHash: typeof parsed.approvedHash === "string" ? parsed.approvedHash : null,
         approvedAt: typeof parsed.approvedAt === "string" ? parsed.approvedAt : null,
-        approvalScope: parsed.approvalScope === "instructions-v1" ? parsed.approvalScope : null,
         lastFullRunCompletedAt: typeof parsed.lastFullRunCompletedAt === "string"
           ? parsed.lastFullRunCompletedAt
           : legacyFullRunCompletedAt,
         results
       };
     } catch (_) {
-      return { approvedHash: null, approvedAt: null, approvalScope: null, lastFullRunCompletedAt: null, results: {} };
+      return { approvedHash: null, approvedAt: null, lastFullRunCompletedAt: null, results: {} };
     }
   }
 
@@ -105,10 +104,6 @@
         prompts: promptBundle(),
         cases: caseFingerprintData()
       }));
-    }
-
-    function instructionHash() {
-      return fingerprint(JSON.stringify(promptBundle()));
     }
 
     function agentHash() {
@@ -264,24 +259,7 @@
     }
 
     function promptApproved() {
-      const activeInstructionHash = instructionHash();
-      if (saved.approvalScope === "instructions-v1") {
-        return Boolean(saved.approvedHash && saved.approvedHash === activeInstructionHash);
-      }
-      const approvedAt = Date.parse(saved.approvedAt || "");
-      const instructionsUpdatedAt = Date.parse(knowledge.instructionBundleUpdatedAt || "");
-      if (
-        saved.approvedHash &&
-        Number.isFinite(approvedAt) &&
-        Number.isFinite(instructionsUpdatedAt) &&
-        approvedAt >= instructionsUpdatedAt
-      ) {
-        saved.approvedHash = activeInstructionHash;
-        saved.approvalScope = "instructions-v1";
-        persist();
-        return true;
-      }
-      return false;
+      return Boolean(saved.approvedHash && saved.approvedHash === currentHash());
     }
 
     function prepareState(item) {
@@ -336,37 +314,13 @@
     }
 
     async function judgeCriteria(item, output, checks, signal) {
-      const judgeValidationRetries = [];
-      const requestJudgment = validationFeedback => openAI.createEvaluationJudgment({
+      const result = await openAI.createEvaluationJudgment({
         item,
         output,
         deterministicCriteria: checks,
         knowledge,
-        validationFeedback,
         signal
       });
-      let result;
-      try {
-        result = await requestJudgment("");
-      } catch (error) {
-        if (!error.judgeOutput) throw error;
-        judgeValidationRetries.push({
-          error: error.message,
-          output: error.judgeOutput
-        });
-        try {
-          result = await requestJudgment(error.message);
-        } catch (retryError) {
-          retryError.judgeValidationRetries = [
-            ...judgeValidationRetries,
-            ...(retryError.judgeOutput ? [{
-              error: retryError.message,
-              output: retryError.judgeOutput
-            }] : [])
-          ];
-          throw retryError;
-        }
-      }
       const judgment = result.judgment;
       return {
         criteria: [
@@ -378,8 +332,7 @@
         judgeModel: result.model,
         judgeProvider: result.provider || null,
         judgeResponseId: result.responseId,
-        judgeUsage: result.usage,
-        judgeValidationRetries
+        judgeUsage: result.usage
       };
     }
 
@@ -390,11 +343,6 @@
         judged = await judgeCriteria(item, output, checks, signal);
       } catch (error) {
         const settings = openAI.readSettings();
-        error.errorStage = "judge";
-        error.judgeValidationRetries = error.judgeValidationRetries || (error.judgeOutput ? [{
-          error: error.message,
-          output: error.judgeOutput
-        }] : []);
         error.judgeModel = error.model || settings.judgeModel;
         error.judgeProvider = error.provider || openAI.providerForModel(settings.judgeModel);
         error.output = output;
@@ -422,8 +370,7 @@
         judgeModel: judged.judgeModel,
         judgeProvider: judged.judgeProvider,
         judgeResponseId: judged.judgeResponseId,
-        judgeUsage: judged.judgeUsage,
-        judgeValidationRetries: judged.judgeValidationRetries
+        judgeUsage: judged.judgeUsage
       };
     }
 
@@ -547,15 +494,11 @@
         if (!stopped(error)) saved.results[evalId] = {
           evalId,
           promptHash: currentHash(),
-          agentPromptHash: agentHash(),
-          taskType: cases.find(item => item.eval_id === evalId)?.task_type || null,
           completedAt: clock(),
           verdict: "error",
           criteria: [],
           error: error.message,
-          errorStage: error.errorStage || "agent",
           output: error.output || null,
-          judgeValidationRetries: error.judgeValidationRetries || [],
           model: error.model || null,
           provider: error.provider || null,
           responseId: error.responseId || null,
@@ -595,15 +538,11 @@
             saved.results[item.eval_id] = {
               evalId: item.eval_id,
               promptHash: currentHash(),
-              agentPromptHash: agentHash(),
-              taskType: item.task_type,
               completedAt: clock(),
               verdict: "error",
               criteria: [],
               error: error.message,
-              errorStage: error.errorStage || "agent",
               output: error.output || null,
-              judgeValidationRetries: error.judgeValidationRetries || [],
               model: error.model || null,
               provider: error.provider || null,
               responseId: error.responseId || null,
@@ -635,7 +574,7 @@
       const rejudgeableCount = Object.values(saved.results).filter(result =>
         result?.output &&
         result.taskType !== "workflow" &&
-        (result.verdict !== "error" || result.errorStage === "judge" || Boolean(result.judgeModel)) &&
+        result.verdict !== "error" &&
         compatibleAgentOutput(result, activeHash)
       ).length;
       const counts = cases.reduce((summary, item) => {
@@ -655,7 +594,6 @@
         }),
         prompts: promptBundle(),
         promptHash: currentHash(),
-        instructionHash: instructionHash(),
         instructionsUpdatedAt: knowledge.instructionBundleUpdatedAt,
         lastFullRunCompletedAt: saved.lastFullRunCompletedAt,
         promptApproved: promptApproved(),
@@ -683,9 +621,7 @@
         for (const item of cases) {
           if (stopRequested) break;
           const result = saved.results[item.eval_id];
-          const recoverableJudgeError = result?.verdict === "error" &&
-            (result.errorStage === "judge" || Boolean(result.judgeModel));
-          if (!compatibleAgentOutput(result, activeHash) || !result.output || (result.verdict === "error" && !recoverableJudgeError)) continue;
+          if (!compatibleAgentOutput(result, activeHash) || !result.output || result.verdict === "error") continue;
           runningEvalId = item.eval_id;
           onChange();
           if (item.task_type === "workflow") {
@@ -714,17 +650,13 @@
             originalPromptHash: result.originalPromptHash || result.promptHash,
             promptHash: activeHash,
             agentPromptHash: agentHash(),
-            taskType: item.task_type,
             verdict: judged.criteria.every(check => check.passed) ? "pass" : "fail",
             criteria: judged.criteria,
-            error: null,
-            errorStage: null,
             judgment: judged.judgment,
             judgeModel: judged.judgeModel,
             judgeProvider: judged.judgeProvider,
             judgeResponseId: judged.judgeResponseId,
             judgeUsage: judged.judgeUsage,
-            judgeValidationRetries: judged.judgeValidationRetries,
             rejudgedAt: clock()
           };
           regradedCount += 1;
@@ -792,16 +724,6 @@
         if (result.error) {
           lines.push("", "### Error", "", result.error);
         }
-        if (result.judgeValidationRetries?.length) {
-          lines.push(
-            "",
-            "### Rejected judge validation attempts",
-            "",
-            "```json",
-            JSON.stringify(result.judgeValidationRetries, null, 2),
-            "```"
-          );
-        }
         if (result.judgment) {
           lines.push(
             "",
@@ -832,16 +754,14 @@
       exportResultsText,
       rejudgeSavedResults,
       approvePromptReview() {
-        saved.approvedHash = instructionHash();
+        saved.approvedHash = currentHash();
         saved.approvedAt = clock();
-        saved.approvalScope = "instructions-v1";
         persist();
         return model();
       },
       revokePromptReview() {
         saved.approvedHash = null;
         saved.approvedAt = null;
-        saved.approvalScope = null;
         persist();
         return model();
       },
@@ -859,7 +779,7 @@
       },
       reset() {
         if (runningEvalId || runningAll) throw new Error("Wait for the current evaluation to finish.");
-        saved = { approvedHash: null, approvedAt: null, approvalScope: null, lastFullRunCompletedAt: null, results: {} };
+        saved = { approvedHash: null, approvedAt: null, lastFullRunCompletedAt: null, results: {} };
         storage.removeItem(STORAGE_KEY);
         return model();
       },

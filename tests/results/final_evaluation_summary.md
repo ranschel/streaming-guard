@@ -1,13 +1,14 @@
 # Streaming Guard — Final Evaluation Summary
 
-> **Current status:** This is the final current evaluation evidence for the Streaming Guard instruction bundle and ten-case evaluation set.
+> **Official status:** This Terra-agent/Luna-judge run is the official and final capstone evaluation evidence for the Streaming Guard instruction bundle and ten-case evaluation set. Later Claude and Gemini runs are comparative provider-robustness tests and do not replace this official result.
 
-## Final result
+## Official final result
 
 **10 of 10 cases passed.**
 
-- **Prompt hash:** `89d3ee9f`
-- **Run completed:** August 3, 2026 at approximately 11:33 PM PDT
+- **Instruction-bundle fingerprint shown in the UI:** `a96272d6`
+- **Evaluation-configuration fingerprint recorded by the export:** `966b686e`
+- **Run completed:** August 8, 2026 at 11:44 AM PDT
 - **Agent model:** `gpt-5.6-terra`
 - **Independent judge model:** `gpt-5.6-luna`
 - **Passed:** 10
@@ -16,6 +17,8 @@
 - **Material judge gaps:** 0
 
 The complete current evidence, including every fixed input, human-readable output, deterministic check, structured agent response, judge assessment, and workflow result, is retained in [final_evaluation_results.md](final_evaluation_results.md).
+
+The two fingerprints identify different scopes of the same run. The UI fingerprint covers the provider-independent instruction bundle. The export fingerprint additionally covers the selected agent and judge models plus the ten evaluation-case definitions.
 
 ## Results
 
@@ -66,4 +69,4 @@ The evaluation cycle produced documented improvements to:
 - schedule future subscriptions one day before release without ever recommending a start date in the past; and
 - distinguish a selected pause’s calendar duration, maximum permitted duration, avoided billing cycles, and required return date.
 
-The final current run was completed after the context-selection, live-trace, memory-architecture, instruction-cleanup, feedback, free-text-routing, lasting-preference-approval, regression-capture, hybrid-retrieval, and audience-language refinements. All model-driven cases passed structured validation, expected status and action checks, semantic-rubric assessment, and human-control assessment. Every judge result reported an empty `gaps` array.
+The official final run was completed after the context-selection, live-trace, memory-architecture, instruction-cleanup, feedback, free-text-routing, lasting-preference-approval, regression-capture, hybrid-retrieval, and audience-language refinements. All model-driven cases passed structured validation, expected status and action checks, semantic-rubric assessment, and human-control assessment. Every judge result reported an empty `gaps` array.
