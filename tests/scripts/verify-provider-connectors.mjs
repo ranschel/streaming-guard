@@ -182,7 +182,7 @@ await test("google", "builds the documented Gemini generateContent request", asy
   assert.equal(request.options.headers["x-goog-api-key"], "mock-gemini-key");
   assert.equal(request.body.systemInstruction.parts[0].text, knowledge.evaluationJudge);
   assert.equal(request.body.contents[0].role, "user");
-  assert.equal(request.body.generationConfig.responseFormat.text.mimeType, "application/json");
+  assert.equal(request.body.generationConfig.responseFormat.text.mimeType, "APPLICATION_JSON");
   assert.equal(request.body.generationConfig.responseFormat.text.schema.type, "object");
   assert.equal(result.judgment.rubricPassed, true);
   assert.equal(result.responseId, "gemini_mock_1");

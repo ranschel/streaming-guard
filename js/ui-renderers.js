@@ -789,6 +789,9 @@
     const selectedJudgment = selectedResult?.judgment
       ? `<details class="eval-output"><summary>Independent judge output</summary><pre>${escapeHtml(JSON.stringify(selectedResult.judgment, null, 2))}</pre></details>`
       : "";
+    const selectedJudgeRetries = selectedResult?.judgeValidationRetries?.length
+      ? `<details class="eval-output"${selectedVerdict === "error" ? " open" : ""}><summary>Rejected judge validation attempts</summary><pre>${escapeHtml(JSON.stringify(selectedResult.judgeValidationRetries, null, 2))}</pre></details>`
+      : "";
     const selectedError = selectedResult?.error ? `<p class="eval-error">${escapeHtml(selectedResult.error)}</p>` : "";
 
     return `<div class="evaluation-runner">
@@ -854,7 +857,7 @@
                 <section><span>Human-readable output</span><div class="eval-readable-text">${escapeHtml(selectedItem.humanReadableOutput)}</div></section>
               </div>
             </details>
-            ${criteriaMarkup}${selectedError}${selectedOutput}${selectedJudgment}
+            ${criteriaMarkup}${selectedError}${selectedJudgeRetries}${selectedOutput}${selectedJudgment}
             <div class="eval-case-footer">
               <small>${selectedResult?.completedAt ? `Completed ${escapeHtml(dateTime(selectedResult.completedAt))}${selectedResult.model ? ` · response ${escapeHtml(selectedResult.model)}` : ""}${selectedResult.judgeModel ? ` · judge ${escapeHtml(selectedResult.judgeModel)}` : ""}` : "No API call has been made for this case."}</small>
             </div>

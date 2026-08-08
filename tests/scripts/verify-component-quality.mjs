@@ -1162,6 +1162,15 @@ await test("provider_ui", "all structured schemas are strict objects", () => {
   }
 });
 
+await test("provider_ui", "judge evidence is constrained to exact adult-facing fields", () => {
+  const evidence = ["Exact action text.", "Exact rationale text."];
+  const schema = client.evaluationJudgmentSchema(evidence);
+  assert.equal(
+    JSON.stringify(schema.properties.requirementEvidence.items.properties.evidenceQuote.enum),
+    JSON.stringify(["", ...evidence])
+  );
+});
+
 await test("provider_ui", "external-action recommendation fields preserve the record confirmation gate", () => {
   const schema = client.recommendationSchema();
   assert(schema.properties.reminderHeadline.description.includes(

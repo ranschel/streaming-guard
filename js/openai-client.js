@@ -431,7 +431,7 @@
           generationConfig: {
             responseFormat: {
               text: {
-                mimeType: "application/json",
+                mimeType: "APPLICATION_JSON",
                 schema
               }
             }
@@ -824,7 +824,11 @@
     };
   }
 
-  function evaluationJudgmentSchema() {
+  function evaluationJudgmentSchema(adultFacingEvidence = []) {
+    const exactEvidenceChoices = [
+      "",
+      ...new Set(adultFacingEvidence.filter(value => typeof value === "string" && value.trim()))
+    ];
     const properties = {
       rubricPassed: {
         type: "boolean",
@@ -860,7 +864,13 @@
           properties: {
             requirement: { type: "string" },
             passed: { type: "boolean" },
-            evidenceQuote: { type: "string" },
+            evidenceQuote: exactEvidenceChoices.length > 1
+              ? {
+                  type: "string",
+                  enum: exactEvidenceChoices,
+                  description: "For a passed result, select one complete exact adult-facing field. For a failed result, use the empty string."
+                }
+              : { type: "string" },
             gap: { type: "string" }
           },
           required: ["requirement", "passed", "evidenceQuote", "gap"],
@@ -1418,10 +1428,12 @@
     ) {
       throw new Error("The model promised unsupported future monitoring or reminder behavior.");
     }
-    if (
-      requestsJudgment &&
-      (/\b(?:i\s+)?recommend(?:ed|ing|s)?\b/i.test(candidate.action) || /^(?:please\s+)?(?:keep|hold off)\b/i.test(candidate.action.trim()))
-    ) {
+    const adultJudgmentAction = candidate.action.trim();
+    const presentsPositiveRecommendation =
+      /^(?:(?:for now|at this point),\s*)?(?:i|we)\s+(?:(?:strongly|still)\s+)?recommend\b/i.test(adultJudgmentAction) ||
+      /^(?:my|our)\s+recommendation\s+is\b/i.test(adultJudgmentAction) ||
+      /^(?:please\s+)?(?:keep|hold off)\b/i.test(adultJudgmentAction);
+    if (requestsJudgment && presentsPositiveRecommendation) {
       throw new Error("An adult-judgment action cannot be presented as a recommendation.");
     }
 
@@ -1696,9 +1708,10 @@
     output,
     deterministicCriteria,
     knowledge,
+    validationFeedback = "",
     signal
   }) {
-    const adultFacingOutput = [
+    const adultFacingEvidence = [
       output.status,
       output.action,
       output.trigger,
@@ -1714,7 +1727,8 @@
       output.reminderDetails,
       output.confidence,
       output.reply
-    ].filter(value => typeof value === "string" && value.trim()).join("\n");
+    ].filter(value => typeof value === "string" && value.trim());
+    const adultFacingOutput = adultFacingEvidence.join("\n");
     const input = [
       `Evaluation ID: ${item.eval_id}`,
       `Case name: ${item.case_name}`,
@@ -1735,6 +1749,10 @@
       "Adult-facing output text to evaluate and quote as evidence:",
       adultFacingOutput,
       "",
+      validationFeedback
+        ? `Correction required: the previous judge response was rejected because ${validationFeedback} Return a new judgment and copy every passed evidence quote exactly from the adult-facing output above.`
+        : "",
+      validationFeedback ? "" : "",
       "Complete model output to judge:",
       JSON.stringify(output, null, 2)
     ].join("\n");
@@ -1748,7 +1766,7 @@
           type: "json_schema",
           name: "streaming_guard_evaluation_judgment",
           strict: true,
-          schema: evaluationJudgmentSchema()
+          schema: evaluationJudgmentSchema(adultFacingEvidence)
         }
       },
       signal
@@ -1768,6 +1786,7 @@
         judgment: validateEvaluationJudgment(parsed, adultFacingOutput)
       };
     } catch (error) {
+      error.judgeOutput = parsed;
       error.output = parsed;
       error.model = result.model;
       error.provider = result.provider;

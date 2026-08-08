@@ -1653,7 +1653,7 @@ function adultFacingOutputText(output) {
   });
   assert(routedRequest.url.endsWith("/gemini-3.5-flash-lite:generateContent"));
   assert.equal(routedRequest.headers["x-goog-api-key"], "local-gemini-key");
-  assert.equal(routedRequest.body.generationConfig.responseFormat.text.mimeType, "application/json");
+  assert.equal(routedRequest.body.generationConfig.responseFormat.text.mimeType, "APPLICATION_JSON");
   assert(routedRequest.body.generationConfig.responseFormat.text.schema.properties.rubricPassed);
   assert.equal(geminiJudgment.model, "gemini-3.5-flash-lite");
 
@@ -2218,6 +2218,12 @@ await runSuite(
     () => client.validateRecommendation(naturalJudgmentFixture, childPacket, childState),
     "Deterministic validation must not grade an action sentence with semantic keyword matching."
   );
+  const negatedChildRecommendation = recommendationFixture(childState);
+  negatedChildRecommendation.action = "I can't recommend subscribing to Lantern+ yet. Please approve or decline a title-specific exception for Casey and After Dark Harbor before I suggest any action.";
+  assert.doesNotThrow(
+    () => client.validateRecommendation(negatedChildRecommendation, childPacket, childState),
+    "A statement that explicitly withholds a recommendation must not be mistaken for a recommendation."
+  );
 }
 
 {
@@ -2230,6 +2236,12 @@ await runSuite(
   assert.throws(
     () => client.validateRecommendation(recommendationLanguage, judgmentPacket, judgmentState),
     /cannot be presented as a recommendation/
+  );
+  const deferredRecommendationLanguage = recommendationFixture(judgmentState);
+  deferredRecommendationLanguage.action = "I can't make a supported recommendation about Orbit+ yet because Riley's viewing status is missing. Once you confirm it, I can complete the review and recommend whether to keep or change Orbit+.";
+  assert.doesNotThrow(
+    () => client.validateRecommendation(deferredRecommendationLanguage, judgmentPacket, judgmentState),
+    "A deferred future recommendation must remain valid while adult judgment is required."
   );
 }
 
@@ -2458,6 +2470,114 @@ const rejectedOutputResult = await rejectedOutputRunner.runCase("EVAL-03");
 assert.equal(rejectedOutputResult.verdict, "error");
 assert.equal(rejectedOutputResult.output.action, "Keep the bundle unchanged.");
 assert(rejectedOutputRunner.exportResultsText().includes('"action": "Keep the bundle unchanged."'));
+
+{
+  const retryTracker = { agent: 0, judge: 0 };
+  const retryMock = createMockOpenAI(fixture => fixture, fixture => fixture, judgment => judgment, retryTracker);
+  const validJudge = retryMock.createEvaluationJudgment;
+  let firstAttempt = true;
+  retryMock.createEvaluationJudgment = async args => {
+    if (firstAttempt) {
+      firstAttempt = false;
+      retryTracker.judge += 1;
+      const error = new Error("A passed evaluation requirement cited text that is not present in the adult-facing output.");
+      error.judgeOutput = {
+        ...passingJudgment(args.output),
+        requirementEvidence: [{
+          requirement: "Use exact adult-facing evidence.",
+          passed: true,
+          evidenceQuote: "This quote was fabricated by the judge.",
+          gap: ""
+        }]
+      };
+      error.model = "local-independent-judge";
+      error.provider = "openai";
+      throw error;
+    }
+    assert(args.validationFeedback.includes("cited text that is not present"));
+    return validJudge(args);
+  };
+  const retryStorageMemory = new Map();
+  const retryStorage = {
+    getItem: key => retryStorageMemory.get(key) ?? null,
+    setItem: (key, value) => retryStorageMemory.set(key, String(value)),
+    removeItem: key => retryStorageMemory.delete(key)
+  };
+  const retryRunner = window.StreamingGuardEvaluations.createEvaluationRunner({
+    knowledge,
+    context,
+    engine,
+    openAI: retryMock,
+    storage: retryStorage
+  });
+  retryRunner.approvePromptReview();
+  const recoveredResult = await retryRunner.runCase("EVAL-01");
+  assert.equal(recoveredResult.verdict, "pass");
+  assert.equal(retryTracker.agent, 1);
+  assert.equal(retryTracker.judge, 2);
+  assert.equal(recoveredResult.judgeValidationRetries.length, 1);
+  assert(retryRunner.exportResultsText().includes("This quote was fabricated by the judge."));
+}
+
+{
+  const recoveryTracker = { agent: 0, judge: 0 };
+  const recoveryMock = createMockOpenAI(fixture => fixture, fixture => fixture, judgment => judgment, recoveryTracker);
+  const validJudge = recoveryMock.createEvaluationJudgment;
+  recoveryMock.createEvaluationJudgment = async args => {
+    recoveryTracker.judge += 1;
+    const error = new Error("A passed evaluation requirement cited text that is not present in the adult-facing output.");
+    error.judgeOutput = {
+      ...passingJudgment(args.output),
+      requirementEvidence: [{
+        requirement: "Use exact adult-facing evidence.",
+        passed: true,
+        evidenceQuote: "Another fabricated judge quote.",
+        gap: ""
+      }]
+    };
+    error.model = "local-independent-judge";
+    error.provider = "openai";
+    throw error;
+  };
+  const recoveryStorageMemory = new Map();
+  const recoveryStorage = {
+    getItem: key => recoveryStorageMemory.get(key) ?? null,
+    setItem: (key, value) => recoveryStorageMemory.set(key, String(value)),
+    removeItem: key => recoveryStorageMemory.delete(key)
+  };
+  const recoveryRunner = window.StreamingGuardEvaluations.createEvaluationRunner({
+    knowledge,
+    context,
+    engine,
+    openAI: recoveryMock,
+    storage: recoveryStorage
+  });
+  recoveryRunner.approvePromptReview();
+  const judgeErrorResult = await recoveryRunner.runCase("EVAL-01");
+  assert.equal(judgeErrorResult.verdict, "error");
+  assert.equal(judgeErrorResult.errorStage, "judge");
+  assert.equal(judgeErrorResult.judgeValidationRetries.length, 2);
+  assert.equal(recoveryTracker.agent, 1);
+  assert.equal(recoveryTracker.judge, 2);
+  assert.equal(recoveryRunner.model().hasRejudgeableResults, true);
+  const errorExport = recoveryRunner.exportResultsText();
+  assert(errorExport.includes("### Rejected judge validation attempts"));
+  assert(errorExport.includes("Another fabricated judge quote."));
+  const errorMarkup = window.StreamingGuardUI.evaluationMarkup({
+    ...recoveryRunner.model(),
+    selectedEvalId: "EVAL-01"
+  });
+  assert(errorMarkup.includes("Rejected judge validation attempts"));
+  assert(errorMarkup.includes("Another fabricated judge quote."));
+
+  recoveryMock.createEvaluationJudgment = validJudge;
+  const rejudged = await recoveryRunner.rejudgeSavedResults();
+  assert.equal(rejudged.counts.pass, 1);
+  assert.equal(rejudged.counts.error, 0);
+  assert.equal(recoveryTracker.agent, 1, "Rejudging a valid saved agent output must not call the agent again.");
+  assert.equal(recoveryTracker.judge, 3);
+  assert.equal(rejudged.cases.find(item => item.eval_id === "EVAL-01").result.error, null);
+}
 
 const legacyStateStorage = legacyStorage("legacy", JSON.stringify({
     review: {

@@ -336,13 +336,37 @@
     }
 
     async function judgeCriteria(item, output, checks, signal) {
-      const result = await openAI.createEvaluationJudgment({
+      const judgeValidationRetries = [];
+      const requestJudgment = validationFeedback => openAI.createEvaluationJudgment({
         item,
         output,
         deterministicCriteria: checks,
         knowledge,
+        validationFeedback,
         signal
       });
+      let result;
+      try {
+        result = await requestJudgment("");
+      } catch (error) {
+        if (!error.judgeOutput) throw error;
+        judgeValidationRetries.push({
+          error: error.message,
+          output: error.judgeOutput
+        });
+        try {
+          result = await requestJudgment(error.message);
+        } catch (retryError) {
+          retryError.judgeValidationRetries = [
+            ...judgeValidationRetries,
+            ...(retryError.judgeOutput ? [{
+              error: retryError.message,
+              output: retryError.judgeOutput
+            }] : [])
+          ];
+          throw retryError;
+        }
+      }
       const judgment = result.judgment;
       return {
         criteria: [
@@ -354,7 +378,8 @@
         judgeModel: result.model,
         judgeProvider: result.provider || null,
         judgeResponseId: result.responseId,
-        judgeUsage: result.usage
+        judgeUsage: result.usage,
+        judgeValidationRetries
       };
     }
 
@@ -365,6 +390,11 @@
         judged = await judgeCriteria(item, output, checks, signal);
       } catch (error) {
         const settings = openAI.readSettings();
+        error.errorStage = "judge";
+        error.judgeValidationRetries = error.judgeValidationRetries || (error.judgeOutput ? [{
+          error: error.message,
+          output: error.judgeOutput
+        }] : []);
         error.judgeModel = error.model || settings.judgeModel;
         error.judgeProvider = error.provider || openAI.providerForModel(settings.judgeModel);
         error.output = output;
@@ -392,7 +422,8 @@
         judgeModel: judged.judgeModel,
         judgeProvider: judged.judgeProvider,
         judgeResponseId: judged.judgeResponseId,
-        judgeUsage: judged.judgeUsage
+        judgeUsage: judged.judgeUsage,
+        judgeValidationRetries: judged.judgeValidationRetries
       };
     }
 
@@ -516,11 +547,15 @@
         if (!stopped(error)) saved.results[evalId] = {
           evalId,
           promptHash: currentHash(),
+          agentPromptHash: agentHash(),
+          taskType: cases.find(item => item.eval_id === evalId)?.task_type || null,
           completedAt: clock(),
           verdict: "error",
           criteria: [],
           error: error.message,
+          errorStage: error.errorStage || "agent",
           output: error.output || null,
+          judgeValidationRetries: error.judgeValidationRetries || [],
           model: error.model || null,
           provider: error.provider || null,
           responseId: error.responseId || null,
@@ -560,11 +595,15 @@
             saved.results[item.eval_id] = {
               evalId: item.eval_id,
               promptHash: currentHash(),
+              agentPromptHash: agentHash(),
+              taskType: item.task_type,
               completedAt: clock(),
               verdict: "error",
               criteria: [],
               error: error.message,
+              errorStage: error.errorStage || "agent",
               output: error.output || null,
+              judgeValidationRetries: error.judgeValidationRetries || [],
               model: error.model || null,
               provider: error.provider || null,
               responseId: error.responseId || null,
@@ -596,7 +635,7 @@
       const rejudgeableCount = Object.values(saved.results).filter(result =>
         result?.output &&
         result.taskType !== "workflow" &&
-        result.verdict !== "error" &&
+        (result.verdict !== "error" || result.errorStage === "judge" || Boolean(result.judgeModel)) &&
         compatibleAgentOutput(result, activeHash)
       ).length;
       const counts = cases.reduce((summary, item) => {
@@ -644,7 +683,9 @@
         for (const item of cases) {
           if (stopRequested) break;
           const result = saved.results[item.eval_id];
-          if (!compatibleAgentOutput(result, activeHash) || !result.output || result.verdict === "error") continue;
+          const recoverableJudgeError = result?.verdict === "error" &&
+            (result.errorStage === "judge" || Boolean(result.judgeModel));
+          if (!compatibleAgentOutput(result, activeHash) || !result.output || (result.verdict === "error" && !recoverableJudgeError)) continue;
           runningEvalId = item.eval_id;
           onChange();
           if (item.task_type === "workflow") {
@@ -673,13 +714,17 @@
             originalPromptHash: result.originalPromptHash || result.promptHash,
             promptHash: activeHash,
             agentPromptHash: agentHash(),
+            taskType: item.task_type,
             verdict: judged.criteria.every(check => check.passed) ? "pass" : "fail",
             criteria: judged.criteria,
+            error: null,
+            errorStage: null,
             judgment: judged.judgment,
             judgeModel: judged.judgeModel,
             judgeProvider: judged.judgeProvider,
             judgeResponseId: judged.judgeResponseId,
             judgeUsage: judged.judgeUsage,
+            judgeValidationRetries: judged.judgeValidationRetries,
             rejudgedAt: clock()
           };
           regradedCount += 1;
@@ -746,6 +791,16 @@
         }
         if (result.error) {
           lines.push("", "### Error", "", result.error);
+        }
+        if (result.judgeValidationRetries?.length) {
+          lines.push(
+            "",
+            "### Rejected judge validation attempts",
+            "",
+            "```json",
+            JSON.stringify(result.judgeValidationRetries, null, 2),
+            "```"
+          );
         }
         if (result.judgment) {
           lines.push(
